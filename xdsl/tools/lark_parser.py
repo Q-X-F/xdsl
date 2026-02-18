@@ -62,7 +62,7 @@ grammar = r"""
     COMMENT.3 : /;[^\n]*/
     %ignore COMMENT
     OPCODE.2 : /""" + ops_re + r"""/
-    REG.2 : /""" + regs_re + """"/
+    REG.2 : /""" + regs_re + r"""/
     %import common.SIGNED_NUMBER -> IMM
     %import common.NUMBER -> OFFSET
     LABELNAME.1 : /[._a-zA-Z][._a-zA-Z0-9]*/
