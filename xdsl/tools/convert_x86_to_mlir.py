@@ -60,6 +60,14 @@ def is_jump_instruction(tree: Union[Token, ParseTree]) -> bool:
     opcode = tree.children[0].value.lower()
     return opcode == "jmp" or opcode in CONDITIONAL_JUMP_OPS.keys()
 
+def is_terminating_instruction(tree: Union[Token, ParseTree]) -> bool:
+    if is_jump_instruction(tree):
+        return True
+    if isinstance(tree, Token) or not isinstance(tree.children[0], Token):
+        return False
+    opcode = tree.children[0].value.lower()
+    return opcode == "ret"
+
 
 class X86Converter:
     def __init__(self):
@@ -72,14 +80,17 @@ class X86Converter:
         blocks : list[list[Union[Token, ParseTree]]] = [[]]
         self.label_map.clear()
         for instruction in tree.children:
-            # TODO: check this matches token syntax
-            if isinstance(instruction, Token) and instruction.type == "label":
-                if blocks == [[]]:  # initial label
+            if isinstance(instruction, Token):
+                raise X86ConversionError("Invalid code structure")
+            if instruction.data == "label":
+                if not isinstance(instruction.children[0], Token):
+                    raise X86ConversionError("Invalid code structure")
+                if len(blocks[-1]) == 0:  # don't add new block if last one was empty
                     blocks.pop()
-                self.label_map[instruction.value] = len(blocks)
+                self.label_map[instruction.children[0].value] = len(blocks)
                 blocks.append([])
             blocks[-1].append(instruction)
-            if is_jump_instruction(instruction):
+            if is_terminating_instruction(instruction):
                 blocks.append([])
         if len(blocks[-1]) == 0:
             blocks.pop()
@@ -105,8 +116,7 @@ class X86Converter:
             raise X86ConversionError("Jump instruction must have one operand")
 
         label = instruction.children[1]
-        # TODO: check this matches token syntax
-        if not isinstance(label, Token) or label.type != "label":
+        if not isinstance(label, Token) or label.type != "LABELNAME":
             raise X86ConversionError("Jump instruction must have label operand")
         label = label.value
         if label not in self.label_map:
@@ -132,11 +142,12 @@ class X86Converter:
         types : list[OperandType] = []
         for operand in operands:
             if isinstance(operand, Token):
-                # TODO: check this matches token syntax
-                if operand.type == "register":
+                if operand.type == "REG":
                     types.append(OperandType.REG)
-                else:
+                elif operand.type == "IMM":
                     types.append(OperandType.IMM)
+                else:
+                    raise X86ConversionError("Data instruction cannot have label operand")
             else:
                 types.append(OperandType.MEM)
         return types
@@ -195,20 +206,20 @@ class X86Converter:
 
     def get_memory_operand(self, operand: Union[Token, ParseTree]) -> tuple[SSAValue, int]:
         # assuming tokens are [reg] or [reg+offset]; other forms not supported by MLIR
-        if isinstance(operand, Token) or len(operand.children) not in (3, 5):
+        if isinstance(operand, Token) or len(operand.children) not in (1, 3):
             raise X86ConversionError("Invalid memory operand")
-        if not isinstance(operand.children[1], Token):
+        if not isinstance(operand.children[0], Token):
             raise X86ConversionError("Invalid memory operand")
-        register = self.current_register_values[operand.children[1].value.lower()]
+        register = self.current_register_values[operand.children[0].value.lower()]
         offset = 0
-        if len(operand.children) == 5:
-            if not isinstance(operand.children[2], Token) or not isinstance(operand.children[3], Token):
+        if len(operand.children) == 3:
+            if not isinstance(operand.children[1], Token) or not isinstance(operand.children[2], Token):
                 raise X86ConversionError("Invalid memory operand")
             try:
-                if operand.children[2] == "+":
-                    offset = int(operand.children[3])
+                if operand.children[1] == "+":
+                    offset = int(operand.children[2])
                 else:
-                    offset = -int(operand.children[3])
+                    offset = -int(operand.children[2])
             except ValueError:
                 raise X86ConversionError(f"Invalid memory offset {offset}") from None
         return register, offset
@@ -413,7 +424,12 @@ class X86Converter:
             for instruction in block:
                 # label
                 if isinstance(instruction, Token):
-                    self.blocks[index].add_op(LabelOp(instruction.value))
+                    raise X86ConversionError("Invalid code structure")
+            
+                if instruction.data == "label":
+                    if not isinstance(instruction.children[0], Token):
+                        raise X86ConversionError("Invalid code structure")
+                    self.blocks[index].add_op(LabelOp(instruction.children[0].value))
                     continue
 
                 if is_jump_instruction(instruction):
@@ -442,108 +458,118 @@ class X86Converter:
 
 
 if __name__ == "__main__":
-    # testing with a manual parse tree for the time being
-    # until we get a lark parser to work
     jambloat = ParseTree(
         "program", [
-            Token("label", "jambloat"),
             ParseTree(
-                "instruction", [
-                    Token("opcode", "add"), Token("register", "rax"), Token("register", "rbx")
+                "label", [
+                    Token("LABELNAME", "jambloat"), Token(":", ":")
                 ]
             ),
             ParseTree(
                 "instruction", [
-                    Token("opcode", "mov"), Token("register", "rcx"), Token("register", "rax")
+                    Token("opcode", "add"), Token("REG", "rax"), Token("REG", "rbx")
                 ]
             ),
             ParseTree(
                 "instruction", [
-                    Token("opcode", "cmp"), Token("register", "rbx"), Token("register", "rcx")
+                    Token("opcode", "mov"), Token("REG", "rcx"), Token("REG", "rax")
                 ]
             ),
             ParseTree(
                 "instruction", [
-                    Token("opcode", "lea"), Token("register", "rbx"), ParseTree("memory", [
-                        Token("[", "["), Token("register", "rax"), Token("]", "]")
+                    Token("opcode", "cmp"), Token("REG", "rbx"), Token("REG", "rcx")
+                ]
+            ),
+            ParseTree(
+                "instruction", [
+                    Token("opcode", "lea"), Token("REG", "rbx"), ParseTree("mem", [
+                        Token("REG", "rax")
                     ])
                 ]
             ),
             ParseTree(
                 "instruction", [
-                    Token("opcode", "mov"), Token("register", "rsp"), ParseTree("memory", [
-                        Token("[", "["), Token("register", "rbx"), Token("+", "+"), Token("immediate", "3"), Token("]", "]")
-                    ])
-                ]
-            ),
-            Token("label", "jambloat2"),
-            ParseTree(
-                "instruction", [
-                    Token("opcode", "add"), Token("register", "r8"), ParseTree("memory", [
-                        Token("[", "["), Token("register", "rsp"), Token("-", "-"), Token("immediate", "10"), Token("]", "]")
+                    Token("opcode", "mov"), Token("REG", "rsp"), ParseTree("mem", [
+                        Token("REG", "rbx"), Token("+", "+"), Token("IMM", "3")
                     ])
                 ]
             ),
             ParseTree(
-                "instruction", [
-                    Token("opcode", "cmp"), ParseTree("memory", [
-                        Token("[", "["), Token("register", "rsp"), Token("-", "-"), Token("immediate", "10"), Token("]", "]")
-                    ]), Token("immediate", "100")
+                "label", [
+                    Token("LABELNAME", "jambloat2"), Token(":", ":")
                 ]
             ),
             ParseTree(
                 "instruction", [
-                    Token("opcode", "inc"), Token("register", "rsp")
+                    Token("opcode", "add"), Token("REG", "r8"), ParseTree("mem", [
+                        Token("REG", "rsp"), Token("-", "-"), Token("IMM", "10")
+                    ])
                 ]
             ),
             ParseTree(
                 "instruction", [
-                    Token("opcode", "push"), Token("register", "rbp")
+                    Token("opcode", "cmp"), ParseTree("mem", [
+                        Token("REG", "rsp"), Token("-", "-"), Token("IMM", "10")
+                    ]), Token("IMM", "100")
                 ]
             ),
             ParseTree(
                 "instruction", [
-                    Token("opcode", "pop"), Token("register", "r15")
+                    Token("opcode", "inc"), Token("REG", "rsp")
                 ]
             ),
             ParseTree(
                 "instruction", [
-                    Token("opcode", "push"), Token("register", "rsp")
+                    Token("opcode", "push"), Token("REG", "rbp")
+                ]
+            ),
+            ParseTree(
+                "instruction", [
+                    Token("opcode", "pop"), Token("REG", "r15")
+                ]
+            ),
+            ParseTree(
+                "instruction", [
+                    Token("opcode", "push"), Token("REG", "rsp")
                 ]
             ),
             
             ParseTree(
                 "instruction", [
-                    Token("opcode", "neg"), ParseTree("memory", [
-                        Token("[", "["), Token("register", "rax"), Token("]", "]")
+                    Token("opcode", "neg"), ParseTree("mem", [
+                        Token("REG", "rax")
                     ])
                 ]
             ),
             ParseTree(
                 "instruction", [
-                    Token("opcode", "push"), ParseTree("memory", [
-                        Token("[", "["), Token("register", "r15"), Token("-", "-"), Token("immediate", "10"), Token("]", "]")
+                    Token("opcode", "push"), ParseTree("mem", [
+                        Token("REG", "r15"), Token("-", "-"), Token("IMM", "10")
                     ])
                 ]
             ),
             ParseTree(
                 "instruction", [
-                    Token("opcode", "jne"), Token("label", "jambloat3")
+                    Token("opcode", "jne"), Token("LABELNAME", "jambloat3")
                 ]
             ),
             ParseTree(
                 "instruction", [
-                    Token("opcode", "pop"), ParseTree("memory", [
-                        Token("[", "["), Token("register", "rbp"), Token("+", "+"), Token("immediate", "10"), Token("]", "]")
+                    Token("opcode", "pop"), ParseTree("mem", [
+                        Token("REG", "rbp"), Token("+", "+"), Token("IMM", "10")
                     ])
                 ]
             ),
             ParseTree(
                 "instruction", [
-                    Token("opcode", "jmp"), Token("label", "jambloat2")
+                    Token("opcode", "jmp"), Token("LABELNAME", "jambloat2")
                 ]
             ),
-            Token("label", "jambloat3"),
+            ParseTree(
+                "label", [
+                    Token("LABELNAME", "jambloat3"), Token(":", ":")
+                ]
+            ),
             ParseTree(
                 "instruction", [
                     Token("opcode", "ret")
