@@ -1,4 +1,5 @@
 from lark import Lark
+from pprint import pprint
 import re
 
 
@@ -134,7 +135,9 @@ test_fib = ("""
 """)
 
 # pretty printed test
-print(x86_parser.parse(test_fib).pretty())
+
+for x in x86_parser.parse(test_label).iter_subtrees():
+    print(x)
 
 
 
