@@ -66,19 +66,21 @@ class Margin:
         self.border = UNICODE_BORDER if unicode else ASCII_BORDER
 
         for line_no in range(len(lines)):
-            for dest in lines.adj[line_no]:
+            # Process forward jumps
+            for end in lines.adj[line_no]:
                 # Will be handled by adj_t case
-                if dest <= line_no:
+                if end <= line_no:
                     continue
 
-                jmp = Jmp(line_no, dest, False)
+                jmp = Jmp(line_no, end, False)
                 self._insert(jmp)
 
-            for dest in lines.adj_t[line_no]:
-                if dest < line_no:
+            # Process backward jumps
+            for start in lines.adj_t[line_no]:
+                if start < line_no:
                     continue
 
-                jmp = Jmp(line_no, dest, True)
+                jmp = Jmp(line_no, start, True)
                 self._insert(jmp)
 
     def _insert(self, jmp: Jmp) -> None:
@@ -87,6 +89,7 @@ class Margin:
                 col.append(jmp)
                 break
         else:
+            # Create new column if current ones are all full
             self.columns.append([jmp])
 
     def _display(
