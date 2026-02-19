@@ -6,6 +6,9 @@ from xdsl.viewer.core import Lines, Margin
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("file", help="Input file with assembly")
+    parser.add_argument(
+        "-u", "--unicode", help="Display with unicode", action="store_true"
+    )
     args = parser.parse_args()
 
     # TODO: pass file to other components
@@ -36,7 +39,7 @@ xor rcx, rcx
     g.add_jump(6, 6)
     g.add_jump(0, 8)
 
-    m = Margin(g)
+    m = Margin(g, args.unicode)
     m.print()
 
 

@@ -38,22 +38,44 @@ class Jmp:
     reversed: bool
 
 
+ASCII_BORDER = {
+    "h": "-",
+    "v": "|",
+    "tr": "+",
+    "tl": "+",
+    "br": "+",
+    "bl": "+",
+    "hv": "-",
+}
+
+UNICODE_BORDER = {
+    "h": "─",
+    "v": "│",
+    "tr": "╮",
+    "tl": "╭",
+    "br": "╯",
+    "bl": "╰",
+    "hv": "─",
+}
+
+
 class Margin:
-    def __init__(self, lines: Lines) -> None:
+    def __init__(self, lines: Lines, unicode: bool = False) -> None:
         self.columns: list[list[Jmp]] = []
         self.lines = lines
+        self.border = UNICODE_BORDER if unicode else ASCII_BORDER
 
         for line_no in range(len(lines)):
             for dest in lines.adj[line_no]:
                 # Will be handled by adj_t case
-                if dest < line_no:
+                if dest <= line_no:
                     continue
 
                 jmp = Jmp(line_no, dest, False)
                 self._insert(jmp)
 
             for dest in lines.adj_t[line_no]:
-                if dest <= line_no:
+                if dest < line_no:
                     continue
 
                 jmp = Jmp(line_no, dest, True)
@@ -67,7 +89,9 @@ class Margin:
         else:
             self.columns.append([jmp])
 
-    def display_outgoing(self, line_no: int, line_width: int = 8) -> str:
+    def _display(
+        self, line_no: int, outgoing: bool = False, line_width: int = 8
+    ) -> str:
         line_width -= 2
         out: list[str] = [" "] * (line_width - len(self.columns))
         horizontal = False
@@ -78,55 +102,48 @@ class Margin:
             index = bisect_right(col, line_no, key=lambda x: x.start) - 1
 
             if index < 0 or len(col) <= index:
-                out.append(" " if not horizontal else "-")
+                out.append(" " if not horizontal else self.border["h"])
                 continue
 
             value = col[index]
 
-            if [value.start, value.end][value.reversed] == line_no:
-                out.append("+")
-                horizontal = True
-                continue
+            if outgoing:
+                if [value.start, value.end][value.reversed] == line_no:
+                    out.append(
+                        self.border["bl"] if value.reversed else self.border["tl"]
+                    )
+                    horizontal = True
+                    continue
 
-            if value.start <= line_no and line_no < value.end:
-                out.append("|" if not horizontal else "-")
-                continue
+                if value.start <= line_no and line_no < value.end:
+                    out.append(self.border["v"] if not horizontal else self.border["h"])
+                    continue
+            else:
+                if [value.end, value.start][value.reversed] == line_no:
+                    out.append(
+                        self.border["tl"] if value.reversed else self.border["bl"]
+                    )
+                    horizontal = True
+                    continue
 
-            out.append(" " if not horizontal else "-")
+                if value.start < line_no and line_no <= value.end:
+                    out.append(self.border["v"] if not horizontal else self.border["h"])
+                    continue
 
-        out.append("-<" if horizontal else "  ")
+            out.append(" " if not horizontal else self.border["h"])
+
+        if outgoing:
+            out.append(self.border["h"] * 2 if horizontal else "  ")
+        else:
+            out.append(self.border["h"] + ">" if horizontal else "  ")
 
         return "".join(out)
 
     def display_incoming(self, line_no: int, line_width: int = 8) -> str:
-        line_width -= 2
-        out: list[str] = [" "] * (line_width - len(self.columns))
-        horizontal = False
+        return self._display(line_no, False, line_width)
 
-        for col in self.columns[:line_width]:
-            # bisect_right gets line_no < x.start
-            # subtract 1 to get x.start <= line_no (our lower bound)
-            index = bisect_right(col, line_no, key=lambda x: x.start) - 1
-
-            if index < 0 or len(col) <= index:
-                out.append(" " if not horizontal else "-")
-                continue
-
-            value = col[index]
-
-            if [value.end, value.start][value.reversed] == line_no:
-                out.append("+")
-                horizontal = True
-                continue
-
-            if value.start < line_no and line_no <= value.end:
-                out.append("|" if not horizontal else "-")
-                continue
-
-            out.append(" " if not horizontal else "-")
-
-        out.append("->" if horizontal else "  ")
-        return "".join(out)
+    def display_outgoing(self, line_no: int, line_width: int = 8) -> str:
+        return self._display(line_no, True, line_width)
 
     def print(self) -> None:
         for line_no in range(len(self.lines)):
