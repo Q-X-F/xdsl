@@ -1,3 +1,4 @@
+import argparse
 from enum import Enum, auto
 
 
@@ -101,7 +102,7 @@ class LineView:
                     indexes.append(s)
 
             if len(incoming) > 0:
-                print(format_slots(slots, ArrowEnum.Incoming, indexes), f":LABEL {id}")
+                print(format_slots(slots, ArrowEnum.Incoming, indexes), f"LABEL_{id}:")
 
             for i in to_remove:
                 slots[i] = None
@@ -124,9 +125,9 @@ class LineView:
                     indexes.append(s)
 
             if len(outgoing) > 0:
-                print(format_slots(slots, ArrowEnum.Outgoing, indexes), line)
+                print(format_slots(slots, ArrowEnum.Outgoing, indexes), " ", line)
             else:
-                print(format_slots(slots, ArrowEnum.Normal), line)
+                print(format_slots(slots, ArrowEnum.Normal), " ", line)
 
             for i in to_remove:
                 slots[i] = None
@@ -135,12 +136,20 @@ class LineView:
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("file", help="Input file with assembly")
+    args = parser.parse_args()
+
+    # TODO: pass file to other components
+    _file = args.file
+
+    # Use temporary output for now
     instructions = """\
-cmp rax, rbx
-add rcx, 0x7
+jmp 0x8
+jmp 0x4
 add rax, 1
 mul rbx, 2
-xor rcx, rcx
+jmp 0x3
 xor rcx, rcx
 xor rcx, rcx
 xor rcx, rcx
@@ -153,6 +162,7 @@ xor rcx, rcx
     for i in instructions:
         g.add_node(i)
 
+    # TODO: add edges from CFG
     g.add_edge(1, 4)
     g.add_edge(4, 3)
     g.add_edge(0, 8)
