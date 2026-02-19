@@ -1,6 +1,8 @@
 from bisect import bisect_right
 from dataclasses import dataclass
 
+from xdsl.utils.colors import RESET, Colors
+
 
 class Lines:
     """
@@ -59,11 +61,18 @@ UNICODE_BORDER = {
 }
 
 
+def blue(x: str) -> str:
+    return Colors.BLUE + x + RESET
+
+
 class Margin:
-    def __init__(self, lines: Lines, unicode: bool = False) -> None:
+    def __init__(
+        self, lines: Lines, unicode: bool = False, color: bool = False
+    ) -> None:
         self.columns: list[list[Jmp]] = []
         self.lines = lines
         self.border = UNICODE_BORDER if unicode else ASCII_BORDER
+        self.color = color
 
         for line_no in range(len(lines)):
             # Process forward jumps
@@ -150,9 +159,17 @@ class Margin:
 
     def print(self) -> None:
         for line_no in range(len(self.lines)):
-            s = self.display_incoming(line_no)
+            row = self.display_incoming(line_no)
 
-            if s[-1] != " ":
-                print(s, f"LINE_{line_no}:")
+            # Don't display label if nothing jumps to it
+            if row[-1] != " ":
+                if self.color:
+                    row = blue(row)
 
-            print(self.display_outgoing(line_no), " ", self.lines.nodes[line_no])
+                print(f"{row} LINE_{line_no}:")
+
+            row = self.display_outgoing(line_no)
+            if self.color:
+                row = blue(row)
+
+            print(f"{row}   {self.lines.nodes[line_no]}")
