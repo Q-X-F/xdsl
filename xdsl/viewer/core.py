@@ -12,25 +12,28 @@ class Lines:
     """
 
     def __init__(self) -> None:
-        self.adj: list[set[int]] = []
-        self.adj_t: list[set[int]] = []
-        self.nodes: list[str] = []
+        self.next: list[set[int]] = []
+        self.prev: list[set[int]] = []
+        self.lines: list[str] = []
 
     def add_line(self, line: str) -> int:
+        """
+        Insert line and return line number
+        """
         new_id = len(self)
 
-        self.adj.append(set())
-        self.adj_t.append(set())
-        self.nodes.append(line)
+        self.next.append(set())
+        self.prev.append(set())
+        self.lines.append(line)
 
         return new_id
 
     def add_jump(self, start_id: int, end_id: int) -> None:
-        self.adj[start_id].add(end_id)
-        self.adj_t[end_id].add(start_id)
+        self.next[start_id].add(end_id)
+        self.prev[end_id].add(start_id)
 
     def __len__(self) -> int:
-        return len(self.adj)
+        return len(self.next)
 
 
 @dataclass
@@ -65,7 +68,7 @@ def blue(x: str) -> str:
     return Colors.BLUE + x + RESET
 
 
-class Margin:
+class LinearView:
     def __init__(
         self, lines: Lines, unicode: bool = False, color: bool = False
     ) -> None:
@@ -76,7 +79,7 @@ class Margin:
 
         for line_no in range(len(lines)):
             # Process forward jumps
-            for end in lines.adj[line_no]:
+            for end in lines.next[line_no]:
                 # Will be handled by adj_t case
                 if end <= line_no:
                     continue
@@ -85,7 +88,7 @@ class Margin:
                 self._insert(jmp)
 
             # Process backward jumps
-            for start in lines.adj_t[line_no]:
+            for start in lines.prev[line_no]:
                 if start < line_no:
                     continue
 
@@ -172,4 +175,4 @@ class Margin:
             if self.color:
                 row = blue(row)
 
-            print(f"{row}   {self.lines.nodes[line_no]}")
+            print(f"{row}   {self.lines.lines[line_no]}")

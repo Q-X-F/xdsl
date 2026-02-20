@@ -2,7 +2,7 @@ import argparse
 import locale
 import sys
 
-from xdsl.viewer.core import Lines, Margin
+from xdsl.viewer.core import LinearView, Lines
 
 
 def supports_utf8() -> bool:
@@ -53,21 +53,21 @@ xor rcx, rcx
 xor rcx, rcx
 """.splitlines()
 
-    g = Lines()
+    lines = Lines()
 
     for i in instructions:
-        g.add_line(i)
+        lines.add_line(i)
 
     # TODO: add edges from CFG
-    g.add_jump(1, 4)
-    g.add_jump(4, 3)
-    g.add_jump(6, 6)
-    g.add_jump(0, 8)
+    lines.add_jump(1, 4)
+    lines.add_jump(4, 3)
+    lines.add_jump(6, 6)
+    lines.add_jump(0, 8)
 
     unicode = args.unicode == "always" or args.unicode == "auto" and is_safe()
     color = args.color == "always" or args.color == "auto" and is_safe()
-    m = Margin(g, unicode, color)
-    m.print()
+    view = LinearView(lines, unicode, color)
+    view.print()
 
 
 if __name__ == "__main__":
