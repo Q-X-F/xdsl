@@ -1,17 +1,29 @@
-from xdsl.dialects.arith import XOrIOp, ConstantOp
-from xdsl.dialects.builtin import IntegerAttr, i32
+from xdsl.dialects.arith import XOrIOp, ConstantOp, AddiOp, IntegerAttr, FloatAttr,
+from xdsl.dialects.builtin import StringAttr
 from xdsl.ir import Operation
-from xdsl.rewriter import Rewriter
-from xdsl.pattern_rewriter import RewritePattern
+from xdsl.pattern_rewriter import RewritePattern, PatternRewriter
 
-# x XOR x = 0
-class SelfXorPattern(RewritePattern):
-    def match_and_rewrite(self, op: Operation, rewriter: Rewriter):
-        if not isinstance(op, XOrIOp):
+def selfXor(op: Operation) -> None:
+    if not isinstance(op, XOrIOp):
+        return
+    if op.lhs != op.rhs:
+        return
+    op.attributes["label"] = StringAttr(f"{op.lhs.name_hint} = 0")
+    op.attributes["description"] = StringAttr("XORs the register with itself, setting it to 0")
+
+# x + 0 = x
+class AddZeroPattern(RewritePattern):
+    def match_and_rewrite(self, op: Operation, rewriter: PatternRewriter) -> None:
+        if not isinstance(op, AddiOp):
             return
-        if op.lhs is not op.rhs:
+        if not isinstance(cst := op.rhs.owner, ConstantOp):
             return
-        # Replace x xor x with 0
-        zero = ConstantOp.from_int_and_width(0, 32)
-        rewriter.replace_op(op, [], new_results=[zero.results[0]])
+        if not isinstance(cst.value, IntegerAttr) and not isinstance(cst.value, FloatAttr):
+            return
+        if cst.value.value.data != 0:
+            return
+        rewriter.replace_op(op, [], new_results=[op.lhs])
+
+
+
 
