@@ -1,9 +1,8 @@
-from xdsl.dialects.arith import XOrIOp, ConstantOp, AddiOp, IntegerAttr, FloatAttr,
-from xdsl.dialects.builtin import StringAttr
+from xdsl.dialects.arith import AddiOp, ConstantOp, SubiOp, XOrIOp
+from xdsl.dialects.builtin import IntegerAttr, StringAttr
 from xdsl.ir import Operation
-from xdsl.pattern_rewriter import RewritePattern, PatternRewriter
 
-def selfXor(op: Operation) -> None:
+def annoXor(op: Operation) -> None:
     if not isinstance(op, XOrIOp):
         return
     if op.lhs != op.rhs:
@@ -11,18 +10,27 @@ def selfXor(op: Operation) -> None:
     op.attributes["label"] = StringAttr(f"{op.lhs.name_hint} = 0")
     op.attributes["description"] = StringAttr("XORs the register with itself, setting it to 0")
 
-# x + 0 = x
-class AddZeroPattern(RewritePattern):
-    def match_and_rewrite(self, op: Operation, rewriter: PatternRewriter) -> None:
-        if not isinstance(op, AddiOp):
-            return
-        if not isinstance(cst := op.rhs.owner, ConstantOp):
-            return
-        if not isinstance(cst.value, IntegerAttr) and not isinstance(cst.value, FloatAttr):
-            return
-        if cst.value.value.data != 0:
-            return
-        rewriter.replace_op(op, [], new_results=[op.lhs])
+def annoSub(op: Operation) -> None:
+    if not isinstance(op, SubiOp):
+        return
+    if op.lhs != op.rhs:
+        return
+    op.attributes["label"] = StringAttr(f"{op.lhs.name_hint} = 0")
+    op.attributes["description"] = StringAttr("Subtracts the register from itself, setting it to 0")
+
+def annoAddConst(op: Operation) -> None:
+    if not isinstance(op, AddiOp):
+        return
+    if not isinstance(c := op.rhs.owner, ConstantOp):
+        return
+    if not isinstance(c.value, IntegerAttr):
+        return
+    if c.value.value.data == 1:
+        op.attributes["label"] = StringAttr(f"{op.lhs.name_hint}++")
+        op.attributes["description"] = StringAttr("Increments the register")
+    else:
+        op.attributes["label"] = StringAttr(f"{op.lhs.name_hint} += {c.value.value.data}")
+        op.attributes["description"] = StringAttr("Adds a constant to the register")
 
 
 
