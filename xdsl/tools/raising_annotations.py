@@ -31,7 +31,3 @@ def annoAddConst(op: Operation) -> None:
     else:
         op.attributes["label"] = StringAttr(f"{op.lhs.name_hint} += {c.value.value.data}")
         op.attributes["description"] = StringAttr("Adds a constant to the register")
-
-
-
-
