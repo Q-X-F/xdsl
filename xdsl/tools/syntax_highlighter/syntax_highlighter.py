@@ -136,15 +136,3 @@ def highlight_x86(code: str) -> str:
         highlighted_lines.append(indent + " ".join(new_tokens) + comment_part)
 
     return "\n".join(highlighted_lines)
-
-sample_code = """
-_start:
-    mov rax, 1
-    mov rdi, 0
-    syscall
-    cmp rax, 10
-    jne _start ; loop until equal
-    ret
-"""
-
-print(highlight_x86(sample_code))
