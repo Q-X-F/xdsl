@@ -92,7 +92,7 @@ def highlight_x86(code: str) -> str:
         raise FileNotFoundError("config.json not found in the same directory as the script.")
     
     with open(config_path, "r") as f:
-        return json.load(f)
+        config = json.load(f)
 
     def color(text, syntax_type):
         color_name = config.get(syntax_type, "white")
