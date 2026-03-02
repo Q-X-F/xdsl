@@ -1,5 +1,6 @@
 from bisect import bisect_right
 from dataclasses import dataclass
+from io import StringIO
 
 from xdsl.utils.colors import RESET, Colors
 
@@ -68,6 +69,21 @@ def blue(x: str) -> str:
     return Colors.BLUE + x + RESET
 
 
+def insertable(col: list[Jmp], jmp: Jmp) -> bool:
+    if len(col) == 0:
+        return True
+
+    last = col[-1]
+
+    if last.end < jmp.start:
+        return True
+
+    if last.end == jmp.start and not last.reversed and jmp.reversed:
+        return True
+
+    return False
+
+
 class LinearView:
     def __init__(
         self, lines: Lines, unicode: bool = False, color: bool = False
@@ -97,7 +113,7 @@ class LinearView:
 
     def _insert(self, jmp: Jmp) -> None:
         for col in self.columns:
-            if len(col) == 0 or col[-1].end <= jmp.start:
+            if insertable(col, jmp):
                 col.append(jmp)
                 break
         else:
@@ -160,19 +176,19 @@ class LinearView:
     def display_outgoing(self, line_no: int, line_width: int = 8) -> str:
         return self._display(line_no, True, line_width)
 
-    def print(self) -> None:
+    def print(self, *, file: StringIO | None = None, line_width: int = 8) -> None:
         for line_no in range(len(self.lines)):
-            row = self.display_incoming(line_no)
+            row = self.display_incoming(line_no, line_width=line_width)
 
             # Don't display label if nothing jumps to it
             if row[-1] != " ":
                 if self.color:
                     row = blue(row)
 
-                print(f"{row} LINE_{line_no}:")
+                print(f"{row} LINE_{line_no}:", file=file)
 
-            row = self.display_outgoing(line_no)
+            row = self.display_outgoing(line_no, line_width=line_width)
             if self.color:
                 row = blue(row)
 
-            print(f"{row}   {self.lines.lines[line_no]}")
+            print(f"{row}   {self.lines.lines[line_no]}", file=file)
