@@ -12,25 +12,25 @@ def supports_utf8() -> bool:
 
 def is_safe() -> bool:
     """
-    Detects if safe to display unicode and colors.
+    Detects if safe to display Unicode and colors.
     """
     return sys.stdout.isatty() and supports_utf8()
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("file", help="Input file with assembly")
+    parser.add_argument("file", help="input file with assembly")
     parser.add_argument(
         "-u",
         "--unicode",
-        help="Display with unicode",
+        help="display with unicode",
         choices=["auto", "always", "never"],
         default="auto",
     )
     parser.add_argument(
         "-c",
         "--color",
-        help="Display with color",
+        help="display with color",
         choices=["auto", "always", "never"],
         default="auto",
     )
