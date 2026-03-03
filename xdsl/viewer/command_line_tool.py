@@ -141,7 +141,9 @@ def main():
         choices=["auto", "always", "never"],
         default="auto",
     )
-    parser.add_argument("-x", "--x86", help="use raw x86", action="store_true")
+    parser.add_argument(
+        "-m", "--mlir", help="use mlir representation", action="store_true"
+    )
     parser.add_argument(
         "-c",
         "--color",
@@ -161,11 +163,11 @@ def main():
     unicode = args.unicode == "always" or args.unicode == "auto" and is_safe()
     color = args.color == "always" or args.color == "auto" and is_safe()
 
-    if args.x86:
-        lines = process_asm(text, color)
+    if args.mlir:
+        lines = process_mlir(text, color)
 
     else:
-        lines = process_mlir(text, color)
+        lines = process_asm(text, color)
 
     view = LinearView(lines, unicode, color)
     view.print()
