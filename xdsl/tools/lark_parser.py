@@ -1,6 +1,7 @@
 import re
 
-from lark import Lark
+from lark import Lark, Token, Tree
+from lark.tree import Branch
 
 
 def string_to_case_insensitive_regex(s: str) -> str:
@@ -149,6 +150,52 @@ grammar = f"""
 
 # Lark parser
 x86_parser = Lark(grammar, start="program")
+
+
+def transform_operand(b: Branch[Token]) -> Branch[Token]:
+    if not isinstance(b, Tree):
+        raise ValueError
+
+    return b.children[0]
+
+
+def transform_instruction(t: Tree[Token]) -> Tree[Token]:
+    opcode = t.children[0]
+
+    # Can contain None so be careful
+    operands = [transform_operand(b) for b in t.children[1:] if b is not None]
+    return Tree("instruction", [opcode] + operands)
+
+
+def transform_label(t: Tree[Token]) -> Tree[Token]:
+    return t
+
+
+def transform_lines(b: Branch[Token]) -> Branch[Token]:
+    if not isinstance(b, Tree):
+        raise ValueError
+
+    b2 = b.children[0]
+
+    if not isinstance(b2, Tree):
+        raise ValueError
+
+    if b2.data == "instruction":
+        return transform_instruction(b2)
+    elif b2.data == "label":
+        return transform_label(b2)
+    else:
+        raise ValueError
+
+
+def transform(t: Tree[Token]) -> Tree[Token]:
+    lines = [transform_lines(b) for b in t.children]
+    return Tree("program", lines)
+
+
+def parse(text: str) -> Tree[Token]:
+    tree = x86_parser.parse(text)
+    return transform(tree)
 
 
 if __name__ == "__main__":
