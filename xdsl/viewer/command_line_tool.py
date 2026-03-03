@@ -84,7 +84,8 @@ def process_mlir(text: str, color: bool) -> Lines:
     block_names: list[str] = []
 
     for line in s.getvalue().split("\n"):
-        if line.lstrip().startswith("^bb"):
+        line = line.lstrip()
+        if line.startswith("^bb") or line.startswith("x86_func"):
             block_names.append(line.split("(")[0].lstrip())
 
             if len(block_line_nos) > 0:
