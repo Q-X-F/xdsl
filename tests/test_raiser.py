@@ -32,8 +32,8 @@ class TestRegion:
 
 class TestCondJump(TestOp):
     def __init__(self, thenb: TestBlock, elseb: TestBlock) -> None:
-        self.thenb = thenb
-        self.elseb = elseb
+        self.then_block = thenb
+        self.else_block = elseb
 
 
 TestSucc: TypeAlias = tuple[()] | tuple[TestBlock] | tuple[TestBlock, TestBlock]
@@ -61,8 +61,10 @@ def test_if_else(monkeypatch: pytest.MonkeyPatch) -> None:
     ) -> dict[TestBlock, TestSucc]:
         return adj_list
 
-    monkeypatch.setattr("control.build_adj", build_adj)
-    monkeypatch.setattr("control.ConditionalJumpOperation", TestCondJump)
+    monkeypatch.setattr("xdsl.tools.raiser.control.build_adj", build_adj)
+    monkeypatch.setattr(
+        "xdsl.tools.raiser.control.ConditionalJumpOperation", TestCondJump
+    )
 
     result: list[control.ControlBlock] = control.detect_control_blocks(
         cast(Region, region)
@@ -75,4 +77,40 @@ def test_if_else(monkeypatch: pytest.MonkeyPatch) -> None:
     assert b.entry_block == entry
     assert b.then_block == thenb
     assert b.else_block == elseb
+    assert b.exit_block == exitb
+
+
+def test_while(monkeypatch: pytest.MonkeyPatch) -> None:
+    entry = TestBlock("entry")
+    bodyb = TestBlock("body")
+    exitb = TestBlock("exit")
+
+    entry.last_op = TestCondJump(bodyb, exitb)
+
+    region = TestRegion([entry, bodyb, exitb])
+
+    adj_list: dict[TestBlock, TestSucc] = {
+        entry: (bodyb, exitb),
+        bodyb: (entry,),
+        exitb: (),
+    }
+
+    def build_adj(_: Region) -> dict[TestBlock, TestSucc]:
+        return adj_list
+
+    monkeypatch.setattr("xdsl.tools.raiser.control.build_adj", build_adj)
+    monkeypatch.setattr(
+        "xdsl.tools.raiser.control.ConditionalJumpOperation", TestCondJump
+    )
+
+    result: list[control.ControlBlock] = control.detect_control_blocks(
+        cast(Region, region)
+    )
+
+    assert len(result) == 1
+
+    b = result[0]
+    assert isinstance(b, control.WhileBlock)
+    assert b.entry_block == entry
+    assert b.body_block == bodyb
     assert b.exit_block == exitb

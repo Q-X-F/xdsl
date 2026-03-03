@@ -1,9 +1,8 @@
 from dataclasses import dataclass
 
-from cfg import SuccBlock, build_adj
-
 from xdsl.dialects.x86.ops import ConditionalJumpOperation
 from xdsl.ir import Block, Region
+from xdsl.tools.cfg import SuccBlock, build_adj
 
 
 @dataclass
