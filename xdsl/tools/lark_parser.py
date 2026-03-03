@@ -4,7 +4,7 @@ import re
 
 
 def string_to_case_insensitive_regex(s: str) -> str:
-    parts = []
+    parts: list[str] = []
     parts.append("")
     for char in s:
         upper = char.upper()
@@ -150,7 +150,7 @@ grammar = r"""
 x86_parser = Lark(grammar, start='program')
 
 
-def parse(code_segment):
+def parse(code_segment: str):
     return x86_parser.parse(code_segment)
 
 
