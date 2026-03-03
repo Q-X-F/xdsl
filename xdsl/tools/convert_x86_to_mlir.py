@@ -9,6 +9,8 @@ from xdsl.dialects.x86.registers import RFLAGS, X86_INDEX_BY_NAME
 from xdsl.dialects.x86_func import *
 from xdsl.ir import BlockArgument
 
+from xdsl.tools.cfg import group_functions
+
 
 class X86ConversionError(Exception):
     def __init__(self, *args: object):
@@ -113,6 +115,8 @@ class X86Converter:
         if not isinstance(opcode, Token):
             raise X86ConversionError("Instruction should start with opcode token")
         opcode = opcode.lower()
+
+        print(instruction)
 
         if len(instruction.children) != 2:
             raise X86ConversionError("Jump instruction must have one operand")
@@ -328,14 +332,14 @@ class X86Converter:
         # TODO: fix clobbered registers...
         if opcode == "call":
             if (
-                len(instruction.children) != 0
-                or not isinstance(instruction.children[0], Token)
-                or instruction.children[0].type != "LABELNAME"
+                len(instruction.children) != 2
+                or not isinstance(instruction.children[1], Token)
+                or instruction.children[1].type != "LABELNAME"
             ):
                 raise X86ConversionError("Call instruction should have exactly one label operand")
             return_types: list[Attribute] = []
             op = CallOp(
-                callee=str(instruction.children[0]),
+                callee=str(instruction.children[1]),
                 arguments=list(self.current_register_values.values()),
                 return_types=return_types
             )
@@ -701,9 +705,11 @@ class X86Converter:
                         raise X86ConversionError("Invalid code structure")
                     self.blocks[index].add_op(LabelOp(instruction.children[0].value))
                     continue
+            
+                if is_terminating_instruction(instruction):
+                    ended_with_jump = True
 
                 if is_jump_instruction(instruction):
-                    ended_with_jump = True
                     self.blocks[index].add_op(self.parse_jump(instruction, index))
                 else:
                     self.blocks[index].add_op(self.parse_instruction(instruction))
@@ -721,12 +727,56 @@ class X86Converter:
         blocks = self.get_basic_blocks(tree)
         self.convert_blocks(blocks)
 
-        region = Region(self.blocks)
+        grouped_blocks = group_functions(self.blocks, self.label_map)
+        final_blocks: list[Block] = []
+        for block in grouped_blocks:
+            if isinstance(block, Block):
+                final_blocks.append(block)
+            else:
+                region = Region(block)
+                assert(isinstance(block[0].first_op, LabelOp))
+                name = str(block[0].first_op.label)
+                register_args: list[Attribute] = []
+                for register in X86_INDEX_BY_NAME.keys():
+                    register_args.append(GeneralRegisterType.from_name(register))
+                register_args.append(RFLAGS)
+                func = FuncOp(
+                    name, region, (register_args, [])
+                )
+                final_blocks.append(Block([func]))
+        
+        region = Region(final_blocks)
         return region
 
 
 if __name__ == "__main__":
     from xdsl.tools.lark_parser import parse
+
+    program2 = """
+            
+        
+        test_func_3:
+            cmp rax, rbx
+            jnz func_3_label
+            imul rax
+            ret
+        
+        test_func:
+            pop rbx
+            add rbx, [rax+3]
+            ret
+
+        func_3_label:
+            imul rbx
+            ret
+        
+        test_func_2:
+            push rax
+            call test_func
+            ret
+
+            
+    """
 
     program = """
         _start:
@@ -765,7 +815,7 @@ if __name__ == "__main__":
             ; syscall
     """
 
-    jambloat = parse(program)
+    jambloat = parse(program2)
     print(jambloat)
 
     converter = X86Converter()
