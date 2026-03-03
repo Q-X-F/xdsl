@@ -11,6 +11,7 @@ from xdsl.syntax_printer import SyntaxPrinter
 from xdsl.tools.convert_x86_to_mlir import X86Converter
 from xdsl.tools.lark_parser import parse
 from xdsl.tools.syntax_highlighter.syntax_highlighter import highlight_x86
+from xdsl.utils.colors import Colors
 from xdsl.viewer.core import LinearView, Lines
 
 # from xdsl.tools.cfg import group_functions
@@ -111,8 +112,8 @@ def process_mlir(text: str, color: bool) -> Lines:
             continue
 
         bb = bbs[0]
-        if "fallthrough" not in line:
-            lines.add_jump(pos, block_line_nos[2 * block_names.index(bb)])
+        color2 = Colors.BLUE if "fallthrough" not in line else Colors.WHITE
+        lines.add_jump(pos, block_line_nos[2 * block_names.index(bb)], color2)
 
     return lines
 

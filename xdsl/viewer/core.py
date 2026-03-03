@@ -16,6 +16,7 @@ class Lines:
         self.next: list[set[int]] = []
         self.prev: list[set[int]] = []
         self.lines: list[str] = []
+        self.colors: dict[int, Colors] = {}
 
     def add_line(self, line: str) -> int:
         """
@@ -29,9 +30,10 @@ class Lines:
 
         return new_id
 
-    def add_jump(self, start_id: int, end_id: int) -> None:
+    def add_jump(self, start_id: int, end_id: int, color: Colors = Colors.BLUE) -> None:
         self.next[start_id].add(end_id)
         self.prev[end_id].add(start_id)
+        self.colors[start_id] = color
 
     def __len__(self) -> int:
         return len(self.next)
@@ -42,6 +44,7 @@ class Jmp:
     start: int
     end: int
     reversed: bool
+    color: Colors = Colors.BLUE
 
 
 ASCII_BORDER = {
@@ -63,10 +66,6 @@ UNICODE_BORDER = {
     "bl": "╰",
     "hv": "─",
 }
-
-
-def blue(x: str) -> str:
-    return Colors.BLUE + x + RESET
 
 
 def insertable(col: list[Jmp], jmp: Jmp) -> bool:
@@ -100,7 +99,7 @@ class LinearView:
                 if end <= line_no:
                     continue
 
-                jmp = Jmp(line_no, end, False)
+                jmp = Jmp(line_no, end, False, lines.colors[line_no])
                 self._insert(jmp)
 
             # Process backward jumps
@@ -108,7 +107,7 @@ class LinearView:
                 if start < line_no:
                     continue
 
-                jmp = Jmp(line_no, start, True)
+                jmp = Jmp(line_no, start, True, lines.colors[start])
                 self._insert(jmp)
 
     def _insert(self, jmp: Jmp) -> None:
@@ -125,7 +124,19 @@ class LinearView:
     ) -> str:
         line_width -= 2
         out: list[str] = [" "] * (line_width - len(self.columns))
-        horizontal = False
+        active_jmp: Jmp | None = None
+
+        def output(text: str, jmp: Jmp | None = None):
+            if self.color:
+                j = active_jmp or jmp
+
+                if j is not None:
+                    out.append(j.color)
+
+            out.append(text)
+
+            if self.color:
+                out.append(RESET)
 
         for col in self.columns[:line_width]:
             # bisect_right gets line_no < x.start
@@ -133,40 +144,44 @@ class LinearView:
             index = bisect_right(col, line_no, key=lambda x: x.start) - 1
 
             if index < 0 or len(col) <= index:
-                out.append(" " if not horizontal else self.border["h"])
+                output(" " if not active_jmp else self.border["h"])
                 continue
 
-            value = col[index]
+            jmp = col[index]
 
             if outgoing:
-                if [value.start, value.end][value.reversed] == line_no:
-                    out.append(
-                        self.border["bl"] if value.reversed else self.border["tl"]
+                if [jmp.start, jmp.end][jmp.reversed] == line_no:
+                    active_jmp = jmp
+                    output(
+                        self.border["bl"] if jmp.reversed else self.border["tl"], jmp
                     )
-                    horizontal = True
                     continue
 
-                if value.start <= line_no and line_no < value.end:
-                    out.append(self.border["v"] if not horizontal else self.border["h"])
+                if jmp.start <= line_no and line_no < jmp.end:
+                    output(
+                        self.border["v"] if not active_jmp else self.border["h"], jmp
+                    )
                     continue
             else:
-                if [value.end, value.start][value.reversed] == line_no:
-                    out.append(
-                        self.border["tl"] if value.reversed else self.border["bl"]
+                if [jmp.end, jmp.start][jmp.reversed] == line_no:
+                    active_jmp = jmp
+                    output(
+                        self.border["tl"] if jmp.reversed else self.border["bl"], jmp
                     )
-                    horizontal = True
                     continue
 
-                if value.start < line_no and line_no <= value.end:
-                    out.append(self.border["v"] if not horizontal else self.border["h"])
+                if jmp.start < line_no and line_no <= jmp.end:
+                    output(
+                        self.border["v"] if not active_jmp else self.border["h"], jmp
+                    )
                     continue
 
-            out.append(" " if not horizontal else self.border["h"])
+            output(" " if not active_jmp else self.border["h"])
 
         if outgoing:
-            out.append(self.border["h"] * 2 if horizontal else "  ")
+            output(self.border["h"] * 2 if active_jmp else "  ")
         else:
-            out.append(self.border["h"] + ">" if horizontal else "  ")
+            output(self.border["h"] + ">" if active_jmp else "  ")
 
         return "".join(out)
 
@@ -180,10 +195,7 @@ class LinearView:
         for line_no in range(len(self.lines)):
             row = self.display_incoming(line_no, line_width=line_width)
 
-            if row[-1] == " ":
+            if self.border["h"] not in row:
                 row = self.display_outgoing(line_no, line_width=line_width)
-
-            if self.color:
-                row = blue(row)
 
             print(f"{row} {self.lines.lines[line_no]}", file=file)
