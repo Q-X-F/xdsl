@@ -135,7 +135,7 @@ grammar = r"""
     mem : "[" REG (/[+-]/ OFFSET)? "]"
     COMMENT.3 : /;[^\n]*/
     %ignore COMMENT
-    OPCODE.2 : /(""" + ops_re + r""")[ \t\n\f\r]/
+    OPCODE.2 : /""" + ops_re + r"""/
     REG.2 : /""" + regs_re + r"""/
     %import common.SIGNED_NUMBER -> IMM
     %import common.NUMBER -> OFFSET
