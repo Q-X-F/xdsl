@@ -4,11 +4,11 @@ from collections.abc import Sequence
 
 from xdsl.backend.assembly_printer import AssemblyPrintable, AssemblyPrinter
 from xdsl.dialects.builtin import (
+    FlatSymbolRefAttrConstr,
     FunctionType,
     StringAttr,
     SymbolNameConstraint,
-    FlatSymbolRefAttrConstr,
-    SymbolRefAttr
+    SymbolRefAttr,
 )
 from xdsl.dialects.utils import (
     parse_func_op_like,
@@ -18,8 +18,8 @@ from xdsl.dialects.x86.ops import X86Instruction
 from xdsl.ir import Attribute, Dialect, Operation, Region, SSAValue
 from xdsl.irdl import (
     IRDLOperation,
-    irdl_op_definition,
     attr_def,
+    irdl_op_definition,
     opt_attr_def,
     prop_def,
     region_def,
@@ -30,13 +30,13 @@ from xdsl.irdl import (
 from xdsl.parser import Parser
 from xdsl.printer import Printer
 from xdsl.traits import (
-    SymbolUserOpInterface,
     CallableOpInterface,
     HasParent,
     IsolatedFromAbove,
     IsTerminator,
-    SymbolTable,
     SymbolOpInterface,
+    SymbolTable,
+    SymbolUserOpInterface,
 )
 from xdsl.utils.exceptions import DiagnosticException, VerifyException
 
@@ -57,7 +57,7 @@ class FuncOpCallableInterface(CallableOpInterface):
         assert isinstance(op, FuncOp)
         return op.function_type.outputs.data
 
-        
+
 class CallOpSymbolUserOpInterface(SymbolUserOpInterface):
     def verify(self, op: Operation) -> None:
         assert isinstance(op, CallOp)
@@ -94,7 +94,6 @@ class CallOpSymbolUserOpInterface(SymbolUserOpInterface):
                 )
 
         return
-
 
 
 @irdl_op_definition
@@ -184,7 +183,6 @@ class FuncOp(IRDLOperation, AssemblyPrintable):
                     )
 
         printer.print_string(f"{self.sym_name.data}:\n")
-
 
 
 @irdl_op_definition
