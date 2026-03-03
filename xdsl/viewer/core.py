@@ -180,15 +180,10 @@ class LinearView:
         for line_no in range(len(self.lines)):
             row = self.display_incoming(line_no, line_width=line_width)
 
-            # Don't display label if nothing jumps to it
-            if row[-1] != " ":
-                if self.color:
-                    row = blue(row)
+            if row[-1] == " ":
+                row = self.display_outgoing(line_no, line_width=line_width)
 
-                print(f"{row} LINE_{line_no}:", file=file)
-
-            row = self.display_outgoing(line_no, line_width=line_width)
             if self.color:
                 row = blue(row)
 
-            print(f"{row}   {self.lines.lines[line_no]}", file=file)
+            print(f"{row} {self.lines.lines[line_no]}", file=file)

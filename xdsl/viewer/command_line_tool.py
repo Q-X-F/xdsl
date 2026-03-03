@@ -1,8 +1,18 @@
 import argparse
 import locale
 import sys
+from io import StringIO
 
+from lark import ParseTree, Token, Tree
+
+from xdsl.ir import Region
+from xdsl.syntax_printer import SyntaxPrinter
+from xdsl.tools.convert_x86_to_mlir import X86Converter
+from xdsl.tools.lark_parser import parse
+from xdsl.tools.syntax_highlighter.syntax_highlighter import highlight_x86
 from xdsl.viewer.core import LinearView, Lines
+
+# from xdsl.tools.cfg import group_functions
 
 
 def supports_utf8() -> bool:
@@ -17,6 +27,49 @@ def is_safe() -> bool:
     return sys.stdout.isatty() and supports_utf8()
 
 
+def convert_to_mlir(ast: ParseTree) -> Region:
+    converter = X86Converter()
+    res = converter.convert(ast)
+    return res
+
+
+def process_asm(text: str, color: bool) -> Lines:
+    tree = parse(text)
+    lines = Lines()
+
+    if color:
+        text = highlight_x86(text)
+
+    for line in text.split("\n"):
+        lines.add_line(line)
+
+    labels: dict[str, int] = {}
+    jumps: list[tuple[int, str]] = []
+
+    for t in tree.children:
+        if not isinstance(t, Tree):
+            raise ValueError
+
+        t2 = t.children[0]
+
+        if not isinstance(t2, Token):
+            raise ValueError
+
+        line_no = (t2.line or 0) - 1
+
+        if t.data == "label":
+            labels[str(t2)] = line_no
+
+        for operand in t.children[1:]:
+            if isinstance(operand, Token) and operand.type == "LABELNAME":
+                jumps.append((line_no, str(operand)))
+
+    for line_no, label in jumps:
+        lines.add_jump(line_no, labels[label])
+
+    return lines
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("file", help="input file with assembly")
@@ -27,6 +80,7 @@ def main():
         choices=["auto", "always", "never"],
         default="auto",
     )
+    parser.add_argument("-x", "--x86", help="use raw x86", action="store_true")
     parser.add_argument(
         "-c",
         "--color",
@@ -36,36 +90,31 @@ def main():
     )
     args = parser.parse_args()
 
-    # TODO: pass file to other components
-    _file = args.file
-
-    # Use temporary output for now
-    instructions = """\
-jmp 0x8
-jmp 0x4
-add rax, 1
-mul rbx, 2
-jmp 0x3
-xor rcx, rcx
-jmp 0x6
-xor rcx, rcx
-xor rcx, rcx
-xor rcx, rcx
-""".splitlines()
-
-    lines = Lines()
-
-    for i in instructions:
-        lines.add_line(i)
-
-    # TODO: add edges from CFG
-    lines.add_jump(1, 4)
-    lines.add_jump(4, 3)
-    lines.add_jump(6, 6)
-    lines.add_jump(0, 8)
+    try:
+        with open(args.file) as f:
+            text = f.read()
+    except FileNotFoundError:
+        print(f"error: the file '{args.file}' was not found")
+        exit(1)
 
     unicode = args.unicode == "always" or args.unicode == "auto" and is_safe()
     color = args.color == "always" or args.color == "auto" and is_safe()
+
+    lines = Lines()
+
+    if args.x86:
+        lines = process_asm(text, color)
+
+    else:
+        tree = parse(text)
+        region = convert_to_mlir(tree)
+
+        s = StringIO()
+        SyntaxPrinter(s).print_region(region)
+
+        for line in s.getvalue().split("\n"):
+            lines.add_line(line)
+
     view = LinearView(lines, unicode, color)
     view.print()
 
