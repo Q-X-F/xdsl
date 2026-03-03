@@ -78,8 +78,8 @@ ops = [
     "jz",
     "call",
     "ret",
-    "syscall", 
-    "imul", 
+    "syscall",
+    "imul",
     "idiv"
 ]
 
@@ -155,66 +155,80 @@ def parse(code_segment: str):
 
 
 # tests
-
-test_comment = (
-    "xor rax, rax       ; fib_a = 0\n" 
-    "mov rbx, 1         ; fib_b = 1\n" 
-    "mov rcx, 12        ; print first 12 numbers\n"
-)
-
-test_mem = ("""
-    mov rax, [rdx]
-    mov rbx, [rdx + 4]
-    mov rcx, [rdx - 4]
-    mov [rdx], rcx
-    mov [rdx + 4], rax
-    mov [rdx - 4], rbx
-""")
-
-test_label = ("""
-    .done: 
-    jge .done
-""")
-
-test_no_newline = ("mov rax, rbx add rbx, rax")
-
-
-test_fib = ("""
-    _start:
-        push rbx           ; save callee-saved register
+if __name__ == "__main__":
     
-        xor rax, rax       ; fib_a = 0
-        mov rbx, 1         ; fib_b = 1
-        mov rcx, 12        ; print first 12 numbers
-    
-    print_loop:
-        ; print current fib (rax) using printf
-        mov rdi, fmt
-        mov rsi, rax
-        xor rax, rax       ; varargs count
-        call printf        ; (external, linked via ld -dynamic-linker /lib64/ld-linux-x86-64.so.2 ... or gcc fib.o)
-    
-        ; update fib: temp = a + b; a = b; b = temp
-        mov rdx, rax       ; rdx = old a
-        mov rax, rbx       ; a = old b
-        add rax, rdx       ; a += old a
-    
-        dec rcx
-        jnz print_loop
-    
-        pop rbx            ; restore
-    
-        ; exit(0)
-        mov rax, 60
-        xor rdi, rdi
-        syscall
-""")
+    test_comment = (
+        "xor rax, rax       ; fib_a = 0\n" 
+        "mov rbx, 1         ; fib_b = 1\n" 
+        "mov rcx, 12        ; print first 12 numbers\n"
+    )
 
-# pretty printed test
-print(parse(test_comment).pretty())
-print(parse(test_mem).pretty())
-print(parse(test_label).pretty())
-print(parse(test_no_newline).pretty())
-print(parse(test_fib).pretty())
+    test_mem = ("""
+        mov rax, [rdx]
+        mov rbx, [rdx + 4]
+        mov rcx, [rdx - 4]
+        mov [rdx], rcx
+        mov [rdx + 4], rax
+        mov [rdx - 4], rbx
+    """)
+
+    test_label = ("""
+        .done: 
+        jge .done
+        jambloat:
+        jge jambloat
+        ninja:
+        jge ninja
+        ripple:
+        jge ripple
+    """)
+
+    test_no_newline = ("mov rax, rbx add rbx, rax")
+
+
+    test_fib = ("""
+        _start:
+            push rbx           ; save callee-saved register
+        
+            xor rax, rax       ; fib_a = 0
+            mov rbx, 1         ; fib_b = 1
+            mov rcx, 12        ; print first 12 numbers
+        
+        print_loop:
+            ; print current fib (rax) using printf
+            mov rdi, fmt
+            mov rsi, rax
+            xor rax, rax       ; varargs count
+            call printf        ; (external, linked via ld -dynamic-linker /lib64/ld-linux-x86-64.so.2 ... or gcc fib.o)
+        
+            ; update fib: temp = a + b; a = b; b = temp
+            mov rdx, rax       ; rdx = old a
+            mov rax, rbx       ; a = old b
+            add rax, rdx       ; a += old a
+        
+            dec rcx
+            jnz print_loop
+        
+            pop rbx            ; restore
+        
+            ; exit(0)
+            mov rax, 60
+            xor rdi, rdi
+            syscall
+    """)
+
+
+
+
+    # pretty printed test
+    print(parse(test_comment).pretty())
+    print(parse(test_mem).pretty())
+    print(parse(test_label).pretty())
+    print(parse(test_no_newline).pretty())
+    print(parse(test_fib).pretty())
+
+
+
+
 
 
