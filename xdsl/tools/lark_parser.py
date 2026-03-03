@@ -148,6 +148,9 @@ grammar = r"""
 x86_parser = Lark(grammar, start='program')
 
 
+def parse(code_segment):
+    return x86_parser.parse(code_segment)
+
 
 # tests
 
@@ -206,8 +209,10 @@ test_fib = ("""
 """)
 
 # pretty printed test
-print(x86_parser.parse(test_comment).pretty())
-print(x86_parser.parse(test_mem).pretty())
-print(x86_parser.parse(test_label).pretty())
-print(x86_parser.parse(test_no_newline).pretty())
-print(x86_parser.parse(test_fib).pretty())
+print(parse(test_comment).pretty())
+print(parse(test_mem).pretty())
+print(parse(test_label).pretty())
+print(parse(test_no_newline).pretty())
+print(parse(test_fib).pretty())
+
+
