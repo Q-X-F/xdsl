@@ -1,5 +1,6 @@
 import argparse
 import locale
+import re
 import sys
 from io import StringIO
 
@@ -34,8 +35,8 @@ def convert_to_mlir(ast: ParseTree) -> Region:
 
 
 def process_asm(text: str, color: bool) -> Lines:
-    tree = parse(text)
     lines = Lines()
+    tree = parse(text)
 
     if color:
         text = highlight_x86(text)
@@ -70,6 +71,52 @@ def process_asm(text: str, color: bool) -> Lines:
     return lines
 
 
+def process_mlir(text: str, color: bool) -> Lines:
+    lines = Lines()
+    tree = parse(text)
+    region = convert_to_mlir(tree)
+
+    s = StringIO()
+    SyntaxPrinter(s).print_region(region)
+
+    block_line_nos: list[int] = []
+    block_names: list[str] = []
+
+    for line in s.getvalue().split("\n"):
+        if line.lstrip().startswith("^bb"):
+            block_names.append(line.split("(")[0].lstrip())
+
+            if len(block_line_nos) > 0:
+                block_line_nos.append(len(lines) - 1)
+
+                lines.add_line("")
+                lines.add_line("")
+                lines.add_line("")
+            block_line_nos.append(len(lines))
+
+        lines.add_line(line)
+
+    if len(block_line_nos) > 0:
+        block_line_nos.append(len(lines) - 1)
+
+        lines.add_line("")
+        lines.add_line("")
+        lines.add_line("")
+
+    for pos in block_line_nos[1::2]:
+        line = lines.lines[pos]
+        bbs = re.findall("(\\^bb\\d+)", line)
+
+        if len(bbs) == 0:
+            continue
+
+        bb = bbs[0]
+        if "fallthrough" not in line:
+            lines.add_jump(pos, block_line_nos[2 * block_names.index(bb)])
+
+    return lines
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("file", help="input file with assembly")
@@ -100,20 +147,11 @@ def main():
     unicode = args.unicode == "always" or args.unicode == "auto" and is_safe()
     color = args.color == "always" or args.color == "auto" and is_safe()
 
-    lines = Lines()
-
     if args.x86:
         lines = process_asm(text, color)
 
     else:
-        tree = parse(text)
-        region = convert_to_mlir(tree)
-
-        s = StringIO()
-        SyntaxPrinter(s).print_region(region)
-
-        for line in s.getvalue().split("\n"):
-            lines.add_line(line)
+        lines = process_mlir(text, color)
 
     view = LinearView(lines, unicode, color)
     view.print()
