@@ -1,4 +1,4 @@
-from typing import cast
+from typing import TypeAlias, cast
 
 import pytest
 
@@ -36,6 +36,9 @@ class TestCondJump(TestOp):
         self.elseb = elseb
 
 
+TestSucc: TypeAlias = tuple[()] | tuple[TestBlock] | tuple[TestBlock, TestBlock]
+
+
 def test_if_else(monkeypatch: pytest.MonkeyPatch) -> None:
     entry = TestBlock("entry")
     thenb = TestBlock("then")
@@ -46,13 +49,16 @@ def test_if_else(monkeypatch: pytest.MonkeyPatch) -> None:
 
     region: TestRegion = TestRegion([entry, thenb, elseb, exitb])
 
-    adj_list: dict[
-        TestBlock, tuple[()] | tuple[TestBlock] | tuple[TestBlock, TestBlock]
-    ] = {entry: (thenb, elseb), thenb: (exitb,), elseb: (exitb,), exitb: ()}
+    adj_list: dict[TestBlock, TestSucc] = {
+        entry: (thenb, elseb),
+        thenb: (exitb,),
+        elseb: (exitb,),
+        exitb: (),
+    }
 
     def build_adj(
         _: Region,
-    ) -> dict[TestBlock, tuple[()] | tuple[TestBlock] | tuple[TestBlock, TestBlock]]:
+    ) -> dict[TestBlock, TestSucc]:
         return adj_list
 
     monkeypatch.setattr("control.build_adj", build_adj)

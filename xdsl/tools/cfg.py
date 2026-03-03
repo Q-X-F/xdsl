@@ -1,12 +1,16 @@
 # from lark import ParseTree, Token
 
 # from convert_x86_to_mlir import X86Converter
+from typing import TypeAlias
+
 from xdsl.dialects.x86 import C_JmpOp, FallthroughOp
 from xdsl.dialects.x86.ops import ConditionalJumpOperation
 from xdsl.dialects.x86_func import CallOp, RetOp
 from xdsl.ir import Block, Region
 
 # from xdsl.tools.convert_x86_to_mlir import X86Converter
+
+SuccBlock: TypeAlias = tuple[()] | tuple[Block] | tuple[Block, Block]
 
 
 class CFGError(Exception):
@@ -36,7 +40,7 @@ def cfg_pprint(region: Region):
 
 def build_adj(
     region: Region,
-) -> dict[Block, tuple[()] | tuple[Block] | tuple[Block, Block]]:
+) -> dict[Block, SuccBlock]:
     """Build adjacency lists of blocks"""
     # NB not strictly necessary, but this simplifies the Block structures
 
@@ -62,7 +66,7 @@ def build_adj(
 
 
 def detect_loops(
-    adj: dict[Block, tuple[()] | tuple[Block] | tuple[Block, Block]], start: Block
+    adj: dict[Block, SuccBlock], start: Block
 ) -> dict[Block, tuple[Block, ...]]:
     """Detect backedges and return dictionary of `first block in loop` -> `blocks in loop`"""
 

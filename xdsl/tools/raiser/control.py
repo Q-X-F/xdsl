@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from cfg import build_adj
+from cfg import SuccBlock, build_adj
 
 from xdsl.dialects.x86.ops import ConditionalJumpOperation
 from xdsl.ir import Block, Region
@@ -30,7 +30,7 @@ ControlBlock = IfElseBlock | WhileBlock
 
 def get_descendants(
     block: Block,
-    adj_list: dict[Block, tuple[()] | tuple[Block] | tuple[Block, Block]],
+    adj_list: dict[Block, SuccBlock],
     visited: set[Block] | None = None,
 ) -> set[Block]:
     """Finds the set of all blocks within a region that can be reached in execution from a given block.
@@ -50,7 +50,7 @@ def get_descendants(
         return {block}
     visited.add(block)
 
-    children: tuple[()] | tuple[Block] | tuple[Block, Block] = adj_list[block]
+    children: SuccBlock = adj_list[block]
 
     result: set[Block] = set()
 
@@ -81,9 +81,7 @@ def detect_control_blocks(region: Region) -> list[ControlBlock]:
     }  # A dictionary mapping blocks to its order in the region
 
     # Build the CFG adjacency list
-    adj_list: dict[Block, tuple[()] | tuple[Block] | tuple[Block, Block]] = build_adj(
-        region
-    )
+    adj_list: dict[Block, SuccBlock] = build_adj(region)
 
     # Maps blocks to a set of all reachable blocks
     descendants: dict[Block, set[Block]] = {
