@@ -78,7 +78,9 @@ ops = [
     "jz",
     "call",
     "ret",
-    "syscall"
+    "syscall", 
+    "imul", 
+    "idiv"
 ]
 
 ops_re = list_string_to_case_insensitive_regex(ops)
