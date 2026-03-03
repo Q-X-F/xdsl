@@ -83,6 +83,8 @@ def process_mlir(text: str, color: bool) -> Lines:
     block_line_nos: list[int] = []
     block_names: list[str] = []
 
+    indents: list[int] = []
+
     for line in s.getvalue().split("\n"):
         line = line.lstrip()
         if line.startswith("^bb") or line.startswith("x86_func"):
@@ -90,13 +92,23 @@ def process_mlir(text: str, color: bool) -> Lines:
 
             if len(block_line_nos) > 0:
                 block_line_nos.append(len(lines) - 1)
-
                 lines.add_line("")
                 lines.add_line("")
                 lines.add_line("")
             block_line_nos.append(len(lines))
 
-        lines.add_line(line)
+        lines.add_line("    " * len(indents[1:]) + line)
+
+        if "}" in line:
+            last = indents.pop()
+
+            if last == 0:
+                continue
+
+            lines.add_jump(last, len(lines) - 1, Colors.RED)
+
+        if "{" in line:
+            indents.append(len(lines) - 1)
 
     if len(block_line_nos) > 0:
         block_line_nos.append(len(lines) - 1)
