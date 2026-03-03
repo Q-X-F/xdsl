@@ -9,6 +9,8 @@ from xdsl.dialects.x86.registers import RFLAGS, X86_INDEX_BY_NAME
 from xdsl.dialects.x86_func import *
 from xdsl.ir import BlockArgument
 
+from xdsl.tools.cfg import group_functions
+
 
 class X86ConversionError(Exception):
     def __init__(self, *args: object):
@@ -114,6 +116,8 @@ class X86Converter:
             raise X86ConversionError("Instruction should start with opcode token")
         opcode = opcode.lower()
 
+        print(instruction)
+
         if len(instruction.children) != 2:
             raise X86ConversionError("Jump instruction must have one operand")
 
@@ -166,7 +170,7 @@ class X86Converter:
         match self.parse_operand_types(operands):
             case [OperandType.REG, OperandType.REG]:
                 match opcode:
-                    case "add" | "sub" | "and" | "xor" | "or":
+                    case "add" | "sub" | "and" | "xor" | "or" | "imul":
                         return "RS"
                     case "mov":
                         return "DS"
@@ -178,7 +182,7 @@ class X86Converter:
                         )
             case [OperandType.REG, OperandType.MEM]:
                 match opcode:
-                    case "add" | "sub" | "and" | "xor" | "or":
+                    case "add" | "sub" | "and" | "xor" | "or" | "imul":
                         return "RM"
                     case "lea" | "mov":
                         return "DM"
@@ -220,7 +224,7 @@ class X86Converter:
                 match opcode:
                     case "dec" | "inc" | "neg" | "not":
                         return "R"
-                    case "push":
+                    case "push" | "imul" | "idiv":
                         return "S"
                     case "pop":
                         return "D"
@@ -230,7 +234,7 @@ class X86Converter:
                         )
             case [OperandType.MEM]:
                 match opcode:
-                    case "dec" | "inc" | "neg" | "not" | "push" | "pop":
+                    case "dec" | "inc" | "neg" | "not" | "push" | "pop" | "imul" | "idiv":
                         return "M"
                     case _:
                         raise X86ConversionError(
@@ -240,6 +244,22 @@ class X86Converter:
                 match opcode:
                     case "ret":
                         return "C"
+                    case _:
+                        raise X86ConversionError(
+                            "Invalid combination of opcode and operands"
+                        )
+            case [OperandType.REG, OperandType.REG, OperandType.IMM]:
+                match opcode:
+                    case "imul":
+                        return "DSI"
+                    case _:
+                        raise X86ConversionError(
+                            "Invalid combination of opcode and operands"
+                        )
+            case [OperandType.REG, OperandType.MEM, OperandType.IMM]:
+                match opcode:
+                    case "imul":
+                        return "DMI"
                     case _:
                         raise X86ConversionError(
                             "Invalid combination of opcode and operands"
@@ -309,6 +329,22 @@ class X86Converter:
             raise X86ConversionError("Instruction should start with opcode token")
         opcode = opcode.lower()
 
+        # TODO: fix clobbered registers...
+        if opcode == "call":
+            if (
+                len(instruction.children) != 2
+                or not isinstance(instruction.children[1], Token)
+                or instruction.children[1].type != "LABELNAME"
+            ):
+                raise X86ConversionError("Call instruction should have exactly one label operand")
+            return_types: list[Attribute] = []
+            op = CallOp(
+                callee=str(instruction.children[1]),
+                arguments=list(self.current_register_values.values()),
+                return_types=return_types
+            )
+            return op
+
         instruction_type = self.parse_instruction_type(opcode, instruction.children[1:])
 
         match instruction_type:
@@ -326,6 +362,8 @@ class X86Converter:
                         op = RS_XorOp(register_in=dest, source=source)
                     case "or":
                         op = RS_OrOp(register_in=dest, source=source)
+                    case "imul":
+                        op = RS_ImulOp(register_in=dest, source=source)
                     case _:
                         raise X86ConversionError(f"Invalid opcode {opcode}")
                 self.set_destination_register(instruction.children[1], op.results[0])
@@ -364,6 +402,10 @@ class X86Converter:
                         )
                     case "or":
                         op = RM_OrOp(
+                            register_in=dest, memory=memory, memory_offset=offset
+                        )
+                    case "imul":
+                        op = RM_ImulOp(
                             register_in=dest, memory=memory, memory_offset=offset
                         )
                     case _:
@@ -530,10 +572,33 @@ class X86Converter:
                 self.set_destination_register(instruction.children[1], op.results[1])
 
             case "S":
-                rsp_in = self.current_register_values["rsp"]
                 source = self.get_source_register(instruction.children[1])
-                op = S_PushOp(rsp_in=rsp_in, source=source)
-                self.current_register_values["rsp"] = op.results[0]
+                match opcode:
+                    case "push":
+                        op = S_PushOp(
+                            rsp_in=self.current_register_values["rsp"], source=source
+                        )
+                    case "imul":
+                        op = S_ImulOp(
+                            rax_input=self.current_register_values["rax"], source=source,
+                            rax_output=GeneralRegisterType.from_name("rax"),
+                            rdx_output=GeneralRegisterType.from_name("rdx")
+                        )
+                    case "idiv":
+                        op = S_IDivOp(
+                            rdx_input=self.current_register_values["rdx"],
+                            rax_input=self.current_register_values["rax"],
+                            source=source,
+                            rax_output=GeneralRegisterType.from_name("rax"),
+                            rdx_output=GeneralRegisterType.from_name("rdx")
+                        )
+                    case _:
+                        raise X86ConversionError(f"Invalid opcode {opcode}")
+                if opcode == "push":
+                    self.current_register_values["rsp"] = op.results[0]
+                if opcode in ("imul", "idiv"):
+                    self.current_register_values["rdx"] = op.results[0]
+                    self.current_register_values["rax"] = op.results[1]
 
             case "M":
                 memory, offset = self.get_memory_operand(instruction.children[1])
@@ -547,6 +612,21 @@ class X86Converter:
                         op = M_NegOp(memory=memory, memory_offset=offset)
                     case "not":
                         op = M_NotOp(memory=memory, memory_offset=offset)
+                    case "imul":
+                        op = M_ImulOp(
+                            rax_in=self.current_register_values["rax"],
+                            memory=memory, memory_offset=offset,
+                            rax_out=GeneralRegisterType.from_name("rax"),
+                            rdx_out=GeneralRegisterType.from_name("rdx")
+                        )
+                    case "idiv":
+                        op = M_IDivOp(
+                            rdx_in=self.current_register_values["rdx"],
+                            rax_in=self.current_register_values["rax"],
+                            memory=memory, memory_offset=offset,
+                            rax_out=GeneralRegisterType.from_name("rax"),
+                            rdx_out=GeneralRegisterType.from_name("rdx")
+                        )
                     case "push":
                         op = M_PushOp(
                             rsp_in=rsp_in,
@@ -565,6 +645,9 @@ class X86Converter:
                         raise X86ConversionError(f"Invalid opcode {opcode}")
                 if opcode in ("pop", "push"):
                     self.current_register_values["rsp"] = op.results[0]
+                if opcode in ("imul", "idiv"):
+                    self.current_register_values["rdx"] = op.results[0]
+                    self.current_register_values["rax"] = op.results[1]
 
             case "C":
                 match opcode:
@@ -572,6 +655,23 @@ class X86Converter:
                         op = RetOp()
                     case _:
                         raise X86ConversionError(f"Invalid opcode {opcode}")
+                        
+            case "DSI":
+                dest = self.get_dest_register_type(instruction.children[1])
+                source = self.get_source_register(instruction.children[2])
+                immediate = self.get_immediate_operand(instruction.children[3])
+                op = DSI_ImulOp(source=source, destination=dest, immediate=immediate)
+                self.set_destination_register(instruction.children[1], op.results[0])
+
+            case "DMI":
+                dest = self.get_dest_register_type(instruction.children[1])
+                memory, offset = self.get_memory_operand(instruction.children[2])
+                immediate = self.get_immediate_operand(instruction.children[3])
+                op = DMI_ImulOp(
+                    memory=memory, memory_offset=offset,
+                    destination=dest, immediate=immediate
+                )
+                self.set_destination_register(instruction.children[1], op.results[0])
 
             case _:
                 raise X86ConversionError(f"Invalid opcode {opcode}")
@@ -586,6 +686,9 @@ class X86Converter:
 
         for index, block in enumerate(instructions):
             self.current_register_values.clear()
+            self.current_register_values["rflags"] = self.block_register_inputs[
+                index
+            ]["rflags"]
             for register in X86_INDEX_BY_NAME.keys():
                 self.current_register_values[register] = self.block_register_inputs[
                     index
@@ -602,9 +705,11 @@ class X86Converter:
                         raise X86ConversionError("Invalid code structure")
                     self.blocks[index].add_op(LabelOp(instruction.children[0].value))
                     continue
+            
+                if is_terminating_instruction(instruction):
+                    ended_with_jump = True
 
                 if is_jump_instruction(instruction):
-                    ended_with_jump = True
                     self.blocks[index].add_op(self.parse_jump(instruction, index))
                 else:
                     self.blocks[index].add_op(self.parse_instruction(instruction))
@@ -622,12 +727,56 @@ class X86Converter:
         blocks = self.get_basic_blocks(tree)
         self.convert_blocks(blocks)
 
-        region = Region(self.blocks)
+        grouped_blocks = group_functions(self.blocks, self.label_map)
+        final_blocks: list[Block] = []
+        for block in grouped_blocks:
+            if isinstance(block, Block):
+                final_blocks.append(block)
+            else:
+                region = Region(block)
+                assert(isinstance(block[0].first_op, LabelOp))
+                name = str(block[0].first_op.label)
+                register_args: list[Attribute] = []
+                for register in X86_INDEX_BY_NAME.keys():
+                    register_args.append(GeneralRegisterType.from_name(register))
+                register_args.append(RFLAGS)
+                func = FuncOp(
+                    name, region, (register_args, [])
+                )
+                final_blocks.append(Block([func]))
+        
+        region = Region(final_blocks)
         return region
 
 
 if __name__ == "__main__":
     from xdsl.tools.lark_parser import parse
+
+    program2 = """
+            
+        
+        test_func_3:
+            cmp rax, rbx
+            jnz func_3_label
+            imul rax
+            ret
+        
+        test_func:
+            pop rbx
+            add rbx, [rax+3]
+            ret
+
+        func_3_label:
+            imul rbx
+            ret
+        
+        test_func_2:
+            push rax
+            call test_func
+            ret
+
+            
+    """
 
     program = """
         _start:
@@ -647,14 +796,14 @@ if __name__ == "__main__":
             ; call printf        ; (external, linked via ld -dynamic-linker /lib64/ld-linux-x86-64.so.2 ... or gcc fib.o)
 
             ; update fib: temp = a + b; a = b; b = temp
-            mov rdx, rax       ; rdx = old a
-            mov rax, rbx       ; a = old b
-            add rax, rdx       ; a += old a
+            mov rdx, [rax-5]       ; rdx = old a
+            mov rax, [rbx+3]       ; a = old b
+            add rax, [rdx]       ; a += old a
 
             dec rcx
 
             ; TODO: support conditional jumps
-            ; jnz print_loop
+            jnz print_loop
             jmp print_loop
 
             pop rbx            ; restore
@@ -666,7 +815,7 @@ if __name__ == "__main__":
             ; syscall
     """
 
-    jambloat = parse(program)
+    jambloat = parse(program2)
     print(jambloat)
 
     converter = X86Converter()
