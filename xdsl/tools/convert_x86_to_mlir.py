@@ -116,8 +116,6 @@ class X86Converter:
             raise X86ConversionError("Instruction should start with opcode token")
         opcode = opcode.lower()
 
-        print(instruction)
-
         if len(instruction.children) != 2:
             raise X86ConversionError("Jump instruction must have one operand")
 
