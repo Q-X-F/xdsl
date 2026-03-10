@@ -156,16 +156,16 @@ def highlight_x86(code: str) -> str:
         if ";" in line:
             line, comment = line.split(";", 1)
             comment_part = color(";" + comment, "comment")
+        if "#" in line:
+            line, comment = line.split("#", 1)
+            comment_part = color("#" + comment, "comment")
 
         stripped = line.lstrip()
         indent = line[: len(line) - len(stripped)]
 
         # Handle labels
-        if stripped.endswith(":"):
-            label = stripped[:-1]
-            highlighted_lines.append(
-                indent + color(label + ":", "label") + comment_part
-            )
+        if stripped.endswith(":") or stripped.startswith("."):
+            highlighted_lines.append(indent + color(stripped, "label") + comment_part)
             continue
 
         tokens = stripped.split(" ")
