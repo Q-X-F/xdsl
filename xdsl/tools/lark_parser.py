@@ -2,7 +2,7 @@ from lark import Lark
 import re
 
 
-
+# Helper function to list_string_to_case_insensitive_regex
 def string_to_case_insensitive_regex(s: str) -> str:
     parts: list[str] = []
     parts.append("")
@@ -18,7 +18,7 @@ def string_to_case_insensitive_regex(s: str) -> str:
     return ''.join(parts)
 
 
-# Turns a list of strings into a regex body that case-insensitively matches any string
+# Turns a list of strings into a regex body that case-insensitively matches any string in the Lark grammar.
 def list_string_to_case_insensitive_regex(l: list[str]) -> str:
     l = sorted(l)[::-1]
     res = ""
@@ -27,7 +27,7 @@ def list_string_to_case_insensitive_regex(l: list[str]) -> str:
     return res[0:-1]
 
 
-# All instruction mnemonics
+# All instruction mnemonics, to be case-insensitively matched to the OPCODE terminal.
 ops = [
     "add",
     "sub",
@@ -85,7 +85,8 @@ ops = [
 
 ops_re = list_string_to_case_insensitive_regex(ops)
 
-# All register mnemonics
+
+# All register mnemonics, to be case-insensitively matched to the REG terminal.
 regs = [
     "eax",
     "ebx",
@@ -125,7 +126,12 @@ regs = [
 
 regs_re = list_string_to_case_insensitive_regex(regs)
 
-# grammar for the Lark parser
+
+# Grammar for the Lark parser
+# Nonterminals are in lowercase, terminals are in uppercase or explicitly marked with double quotes.
+# Terminals in uppercase are part of the parse tree, while explicitly quoted terminals are discarded.
+# The program nonterminal is the starting symbol.
+# Productions are in the form head.precedence : body
 grammar = r"""
     program : (label | instruction)*
 
@@ -144,17 +150,18 @@ grammar = r"""
     %ignore WS
     
 """
-# MEM.1 : "[" /[^\]]*/ "]"
+
 
 # Lark parser
 x86_parser = Lark(grammar, start='program')
 
 
+# Renaming the "x86_parser.parse" method to "parse"
 def parse(code_segment: str):
     return x86_parser.parse(code_segment)
 
 
-# tests
+# Tests
 if __name__ == "__main__":
     
     test_comment = (
@@ -216,9 +223,6 @@ if __name__ == "__main__":
             xor rdi, rdi
             syscall
     """)
-
-
-
 
     # pretty printed test
     print(parse(test_comment).pretty())
