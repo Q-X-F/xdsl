@@ -2,10 +2,13 @@ import argparse
 import locale
 import sys
 
-from xdsl.viewer.core import LinearView, process_asm, process_mlir
+from xdsl.viewer.core import Renderer, process_asm, process_mlir
 
 
-def supports_utf8() -> bool:
+def supports_utf() -> bool:
+    """
+    Checks if current environemnt supports UTF
+    """
     encoding = sys.stdout.encoding or locale.getpreferredencoding(False)
     return isinstance(encoding, str) and encoding.lower().startswith("utf")
 
@@ -14,7 +17,7 @@ def is_safe() -> bool:
     """
     Detects if safe to display Unicode and colors.
     """
-    return sys.stdout.isatty() and supports_utf8()
+    return sys.stdout.isatty() and supports_utf()
 
 
 def main():
@@ -50,13 +53,12 @@ def main():
     color = args.color == "always" or args.color == "auto" and is_safe()
 
     if args.mlir:
-        lines = process_mlir(text, color)
+        program = process_mlir(text)
 
     else:
-        lines = process_asm(text, color)
+        program = process_asm(text, color)
 
-    view = LinearView(lines, unicode, color)
-    view.print()
+    Renderer(program, unicode, color).print()
 
 
 if __name__ == "__main__":

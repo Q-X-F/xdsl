@@ -13,16 +13,24 @@ from xdsl.tools.syntax_highlighter.syntax_highlighter import highlight_x86
 from xdsl.utils.colors import RESET, Colors
 
 
-class Lines:
+@dataclass
+class Jump:
+    start: int
+    end: int
+    reversed: bool
+    color: Colors = Colors.BLUE
+
+
+class ProgramGraph:
     """
-    Lines with jumps.
+    Consists of lines connected by jumps.
 
     Lines are strings that do not have any newlines or control characters.
     """
 
     def __init__(self) -> None:
-        self.next: list[set[int]] = []
-        self.prev: list[set[int]] = []
+        self.outgoing: list[set[int]] = []
+        self.incoming: list[set[int]] = []
         self.lines: list[str] = []
         self.colors: dict[int, Colors] = {}
 
@@ -32,27 +40,22 @@ class Lines:
         """
         new_id = len(self)
 
-        self.next.append(set())
-        self.prev.append(set())
+        self.outgoing.append(set())
+        self.incoming.append(set())
         self.lines.append(line)
 
         return new_id
 
     def add_jump(self, start_id: int, end_id: int, color: Colors = Colors.BLUE) -> None:
-        self.next[start_id].add(end_id)
-        self.prev[end_id].add(start_id)
+        """
+        Add arrow with specified color
+        """
+        self.outgoing[start_id].add(end_id)
+        self.incoming[end_id].add(start_id)
         self.colors[start_id] = color
 
     def __len__(self) -> int:
-        return len(self.next)
-
-
-@dataclass
-class Jmp:
-    start: int
-    end: int
-    reversed: bool
-    color: Colors = Colors.BLUE
+        return len(self.outgoing)
 
 
 ASCII_BORDER = {
@@ -76,7 +79,10 @@ UNICODE_BORDER = {
 }
 
 
-def insertable(col: list[Jmp], jmp: Jmp) -> bool:
+def insertable(col: list[Jump], jmp: Jump) -> bool:
+    """
+    Check if a Jump can be inserted into a list of Jumps without overlap
+    """
     if len(col) == 0:
         return True
 
@@ -91,34 +97,34 @@ def insertable(col: list[Jmp], jmp: Jmp) -> bool:
     return False
 
 
-class LinearView:
+class Renderer:
     def __init__(
-        self, lines: Lines, unicode: bool = False, color: bool = False
+        self, program: ProgramGraph, unicode: bool = False, color: bool = False
     ) -> None:
-        self.columns: list[list[Jmp]] = []
-        self.lines = lines
+        self.columns: list[list[Jump]] = []
+        self.program = program
         self.border = UNICODE_BORDER if unicode else ASCII_BORDER
         self.color = color
 
-        for line_no in range(len(lines)):
+        for line_no in range(len(program)):
             # Process forward jumps
-            for end in lines.next[line_no]:
+            for end in program.outgoing[line_no]:
                 # Will be handled by adj_t case
                 if end <= line_no:
                     continue
 
-                jmp = Jmp(line_no, end, False, lines.colors[line_no])
+                jmp = Jump(line_no, end, False, program.colors[line_no])
                 self._insert(jmp)
 
             # Process backward jumps
-            for start in lines.prev[line_no]:
+            for start in program.incoming[line_no]:
                 if start < line_no:
                     continue
 
-                jmp = Jmp(line_no, start, True, lines.colors[start])
+                jmp = Jump(line_no, start, True, program.colors[start])
                 self._insert(jmp)
 
-    def _insert(self, jmp: Jmp) -> None:
+    def _insert(self, jmp: Jump) -> None:
         for col in self.columns:
             if insertable(col, jmp):
                 col.append(jmp)
@@ -132,9 +138,9 @@ class LinearView:
     ) -> str:
         line_width -= 2
         out: list[str] = [" "] * (line_width - len(self.columns))
-        active_jmp: Jmp | None = None
+        active_jmp: Jump | None = None
 
-        def output(text: str, jmp: Jmp | None = None):
+        def output(text: str, jmp: Jump | None = None):
             if self.color:
                 j = active_jmp or jmp
 
@@ -200,23 +206,29 @@ class LinearView:
         return self._display(line_no, True, line_width)
 
     def print(self, *, file: StringIO | None = None, line_width: int = 8) -> None:
-        for line_no in range(len(self.lines)):
+        for line_no in range(len(self.program)):
             row = self.display_incoming(line_no, line_width=line_width)
 
             if self.border["h"] not in row:
                 row = self.display_outgoing(line_no, line_width=line_width)
 
-            print(f"{row} {self.lines.lines[line_no]}", file=file)
+            print(f"{row} {self.program.lines[line_no]}", file=file)
 
 
-def convert_to_mlir(ast: ParseTree) -> Region:
+def convert_to_mlir(tree: ParseTree) -> Region:
+    """
+    Convert parse tree into Region
+    """
     converter = X86Converter()
-    res = converter.convert(ast)
+    res = converter.convert(tree)
     return res
 
 
-def process_asm(text: str, color: bool) -> Lines:
-    lines = Lines()
+def process_asm(text: str, color: bool) -> ProgramGraph:
+    """
+    Produce x86 ProgramGraph from x86 source code
+    """
+    lines = ProgramGraph()
     tree = parse(text)
 
     if color:
@@ -252,8 +264,11 @@ def process_asm(text: str, color: bool) -> Lines:
     return lines
 
 
-def process_mlir(text: str, color: bool) -> Lines:
-    lines = Lines()
+def process_mlir(text: str) -> ProgramGraph:
+    """
+    Produce MLIR x86 ProgramGraph from x86 source code
+    """
+    lines = ProgramGraph()
     tree = parse(text)
     region = convert_to_mlir(tree)
 

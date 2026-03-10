@@ -6,7 +6,7 @@ from textual.app import App, ComposeResult
 from textual.containers import Horizontal, ScrollableContainer
 from textual.widgets import Footer, Static
 
-from xdsl.viewer.core import LinearView, process_asm, process_mlir
+from xdsl.viewer.core import Renderer, process_asm, process_mlir
 
 
 class AsmApp(App):
@@ -47,11 +47,11 @@ def main():
 
     lines = process_asm(text, True)
     s = StringIO()
-    LinearView(lines, True, True).print(file=s)
+    Renderer(lines, True, True).print(file=s)
 
-    lines = process_mlir(text, True)
+    lines = process_mlir(text)
     s2 = StringIO()
-    LinearView(lines, True, True).print(file=s2)
+    Renderer(lines, True, True).print(file=s2)
 
     AsmApp(s.getvalue(), s2.getvalue()).run()
 
