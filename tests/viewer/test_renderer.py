@@ -26,9 +26,9 @@ def test_disjoint():
     p.add_jump(1, 3)
     p.add_jump(2, 4)
 
-    view = Renderer(p)
+    renderer = Renderer(p)
 
-    assert all(is_disjoint(col) for col in view.columns)
+    assert all(is_disjoint(col) for col in renderer.columns)
 
 
 def test_can_share_column():
@@ -37,8 +37,9 @@ def test_can_share_column():
     for i in range(9):
         p.add_line(str(i))
 
+    # Both incoming so acceptable
     p.add_jump(1, 2)
-    p.add_jump(2, 4)
+    p.add_jump(4, 2)
 
     view = Renderer(p)
 
@@ -54,8 +55,8 @@ def test_jumps_added():
     p.add_jump(0, 8)
     p.add_jump(2, 1)
 
-    view = Renderer(p)
-    jumps = sum(view.columns, list[Jump]())
+    renderer = Renderer(p)
+    jumps = sum(renderer.columns, list[Jump]())
 
     assert Jump(0, 8, False) in jumps
     assert Jump(1, 2, True) in jumps

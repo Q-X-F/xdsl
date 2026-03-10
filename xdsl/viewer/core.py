@@ -1,11 +1,12 @@
-import re
 from bisect import bisect_right
 from dataclasses import dataclass
 from io import StringIO
 
 from lark import ParseTree, Token, Tree
 
-from xdsl.ir import Region
+from xdsl.dialects.x86.ops import C_JmpOp, ConditionalJumpOperation, FallthroughOp
+from xdsl.dialects.x86_func import FuncOp
+from xdsl.ir import Block, Region
 from xdsl.syntax_printer import SyntaxPrinter
 from xdsl.tools.convert_x86_to_mlir import X86Converter
 from xdsl.tools.lark_parser import parse
@@ -32,7 +33,7 @@ class ProgramGraph:
         self.outgoing: list[set[int]] = []
         self.incoming: list[set[int]] = []
         self.lines: list[str] = []
-        self.colors: dict[int, Colors] = {}
+        self.colors: dict[tuple[int, int], Colors] = {}
 
     def add_line(self, line: str) -> int:
         """
@@ -52,7 +53,7 @@ class ProgramGraph:
         """
         self.outgoing[start_id].add(end_id)
         self.incoming[end_id].add(start_id)
-        self.colors[start_id] = color
+        self.colors[(start_id, end_id)] = color
 
     def __len__(self) -> int:
         return len(self.outgoing)
@@ -113,7 +114,7 @@ class Renderer:
                 if end <= line_no:
                     continue
 
-                jmp = Jump(line_no, end, False, program.colors[line_no])
+                jmp = Jump(line_no, end, False, program.colors[(line_no, end)])
                 self._insert(jmp)
 
             # Process backward jumps
@@ -121,7 +122,7 @@ class Renderer:
                 if start < line_no:
                     continue
 
-                jmp = Jump(line_no, start, True, program.colors[start])
+                jmp = Jump(line_no, start, True, program.colors[(start, line_no)])
                 self._insert(jmp)
 
     def _insert(self, jmp: Jump) -> None:
@@ -228,14 +229,14 @@ def process_asm(text: str, color: bool) -> ProgramGraph:
     """
     Produce x86 ProgramGraph from x86 source code
     """
-    lines = ProgramGraph()
+    program = ProgramGraph()
     tree = parse(text)
 
     if color:
         text = highlight_x86(text)
 
     for line in text.split("\n"):
-        lines.add_line(line)
+        program.add_line(line)
 
     labels: dict[str, int] = {}
     jumps: list[tuple[int, str]] = []
@@ -259,68 +260,103 @@ def process_asm(text: str, color: bool) -> ProgramGraph:
                 jumps.append((line_no, str(operand)))
 
     for line_no, label in jumps:
-        lines.add_jump(line_no, labels[label])
+        program.add_jump(line_no, labels[label])
 
-    return lines
+    return program
+
+
+def get_blocks(region: Region) -> list[Block]:
+    """
+    Extract blocks from a Region, including ones inside FuncOp
+    """
+    blocks: list[Block] = []
+
+    for block in region.blocks:
+        op = block.last_op
+
+        if isinstance(op, FuncOp):
+            blocks.extend(get_blocks(op.body))
+        else:
+            blocks.append(block)
+
+    return blocks
+
+
+# Potentially move to utils/cfg module
+def get_outgoing(block: Block) -> list[Block]:
+    op = block.last_op
+
+    if isinstance(op, (C_JmpOp, FallthroughOp)):
+        return [op.successor]
+
+    if isinstance(op, ConditionalJumpOperation):
+        return [op.then_block, op.else_block]
+
+    return []
+
+
+class ViewerPrinter(SyntaxPrinter):
+    blocks: dict[Block, tuple[int, int]] = {}
+
+    def print_block(
+        self,
+        block: Block,
+        print_block_args: bool = True,
+        print_block_terminator: bool = True,
+    ) -> None:
+        start = 0
+        end = 0
+
+        self.print_string(" \n ")
+        self.print_string(" \n ")
+
+        if isinstance(self.stream, StringIO):
+            start = len(self.stream.getvalue().splitlines())
+
+        super().print_block(block, print_block_args, print_block_terminator)
+
+        if isinstance(self.stream, StringIO):
+            end = len(self.stream.getvalue().splitlines()) - 1
+
+        self.blocks[block] = (start, end)
 
 
 def process_mlir(text: str) -> ProgramGraph:
     """
     Produce MLIR x86 ProgramGraph from x86 source code
     """
-    lines = ProgramGraph()
+    program = ProgramGraph()
     tree = parse(text)
     region = convert_to_mlir(tree)
 
     s = StringIO()
-    SyntaxPrinter(s).print_region(region)
+    p = ViewerPrinter(s)
+    p.print_region(region)
 
-    block_line_nos: list[int] = []
-    block_names: list[str] = []
+    for line in s.getvalue().splitlines():
+        program.add_line(line)
 
-    indents: list[int] = []
+    for block, (start, end) in p.blocks.items():
+        if isinstance(block.first_op, FuncOp):
+            program.add_jump(start, end, Colors.YELLOW)
 
-    for line in s.getvalue().split("\n"):
-        line = line.lstrip()
-        if line.startswith("^bb") or line.startswith("x86_func"):
-            block_names.append(line.split("(")[0].lstrip())
+        next_blocks = get_outgoing(block)
 
-            if len(block_line_nos) > 0:
-                block_line_nos.append(len(lines) - 1)
-                lines.add_line("")
-                lines.add_line("")
-                lines.add_line("")
-            block_line_nos.append(len(lines))
+        if len(next_blocks) == 1:
+            dest = p.blocks[next_blocks[0]][0]
 
-        lines.add_line("    " * len(indents[1:]) + line)
+            if isinstance(block.last_op, FallthroughOp):
+                program.add_jump(end, dest, Colors.WHITE)
+            else:
+                program.add_jump(end, dest, Colors.BLUE)
 
-        if "}" in line:
-            last = indents.pop()
+        elif len(next_blocks) == 2:
+            # If then block
+            dest = p.blocks[next_blocks[0]][0]
+            program.add_jump(end, dest, Colors.GREEN)
 
-            if last == 0:
-                continue
+            # Else block
+            dest = p.blocks[next_blocks[1]][0]
+            program.add_jump(end, dest, Colors.RED)
 
-            lines.add_jump(last, len(lines) - 1, Colors.RED)
-
-        if "{" in line:
-            indents.append(len(lines) - 1)
-
-    if len(block_line_nos) > 0:
-        block_line_nos.append(len(lines) - 1)
-
-        lines.add_line("")
-        lines.add_line("")
-        lines.add_line("")
-
-    for pos in block_line_nos[1::2]:
-        line = lines.lines[pos]
-        bbs = re.findall("(\\^bb\\d+)", line)
-
-        if len(bbs) == 0:
-            continue
-
-        bb = bbs[0]
-        color2 = Colors.BLUE if "fallthrough" not in line else Colors.WHITE
-        lines.add_jump(pos, block_line_nos[2 * block_names.index(bb)], color2)
-
-    return lines
+    return program
