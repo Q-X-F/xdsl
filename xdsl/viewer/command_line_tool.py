@@ -2,7 +2,7 @@ import argparse
 import locale
 import sys
 
-from xdsl.viewer.core import Renderer, process_asm, process_mlir
+from xdsl.viewer.core import Renderer, process_asm, process_asm_opt, process_mlir
 
 
 def supports_utf() -> bool:
@@ -31,7 +31,11 @@ def main():
         default="auto",
     )
     parser.add_argument(
-        "-m", "--mlir", help="use mlir representation", action="store_true"
+        "-m",
+        "--mode",
+        help="select mode",
+        choices=["x86", "mlir", "opt_x86"],
+        default="x86",
     )
     parser.add_argument(
         "-c",
@@ -52,11 +56,17 @@ def main():
     unicode = args.unicode == "always" or args.unicode == "auto" and is_safe()
     color = args.color == "always" or args.color == "auto" and is_safe()
 
-    if args.mlir:
+    if args.mode == "x86":
+        program = process_asm(text, color)
+
+    elif args.mode == "mlir":
         program = process_mlir(text)
 
+    elif args.mode == "opt_x86":
+        program = process_asm_opt(text, color)
+
     else:
-        program = process_asm(text, color)
+        raise ValueError
 
     Renderer(program, unicode, color).print()
 

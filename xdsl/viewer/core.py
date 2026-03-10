@@ -4,7 +4,13 @@ from io import StringIO
 
 from lark import ParseTree, Token, Tree
 
-from xdsl.dialects.x86.ops import C_JmpOp, ConditionalJumpOperation, FallthroughOp
+from xdsl.dialects.builtin import ModuleOp
+from xdsl.dialects.x86.ops import (
+    C_JmpOp,
+    ConditionalJumpOperation,
+    FallthroughOp,
+    x86_code,
+)
 from xdsl.dialects.x86_func import FuncOp
 from xdsl.ir import Block, Region
 from xdsl.syntax_printer import SyntaxPrinter
@@ -263,6 +269,16 @@ def process_asm(text: str, color: bool) -> ProgramGraph:
         program.add_jump(line_no, labels[label])
 
     return program
+
+
+def process_asm_opt(text: str, color: bool):
+    tree = parse(text)
+    region = convert_to_mlir(tree)
+
+    new_text = x86_code(ModuleOp(region))
+    new_text = new_text[new_text.find("\n") :]
+
+    return process_asm(new_text, color)
 
 
 def get_blocks(region: Region) -> list[Block]:
