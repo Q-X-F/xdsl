@@ -245,7 +245,7 @@ def process_asm(text: str, color: bool) -> ProgramGraph:
         program.add_line(line)
 
     labels: dict[str, int] = {}
-    jumps: list[tuple[int, str]] = []
+    jumps: list[tuple[int, str, Colors]] = []
 
     for t in tree.children:
         if not isinstance(t, Tree):
@@ -261,12 +261,14 @@ def process_asm(text: str, color: bool) -> ProgramGraph:
         if t.data == "label":
             labels[str(t2)] = line_no
 
+        jump_color = Colors.BLUE if t.children[0] == "jmp" else Colors.GREEN
+
         for operand in t.children[1:]:
             if isinstance(operand, Token) and operand.type == "LABELNAME":
-                jumps.append((line_no, str(operand)))
+                jumps.append((line_no, str(operand), jump_color))
 
-    for line_no, label in jumps:
-        program.add_jump(line_no, labels[label])
+    for line_no, label, jump_color in jumps:
+        program.add_jump(line_no, labels[label], jump_color)
 
     return program
 
