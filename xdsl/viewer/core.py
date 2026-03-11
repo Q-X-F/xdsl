@@ -212,7 +212,7 @@ class Renderer:
     def display_outgoing(self, line_no: int, line_width: int = 8) -> str:
         return self._display(line_no, True, line_width)
 
-    def print(self, *, file: StringIO | None = None, line_width: int = 8) -> None:
+    def print(self, *, file: StringIO | None = None, line_width: int = 16) -> None:
         for line_no in range(len(self.program)):
             row = self.display_incoming(line_no, line_width=line_width)
 
@@ -364,7 +364,7 @@ def process_mlir(text: str) -> ProgramGraph:
             dest = p.blocks[next_blocks[0]][0]
 
             if isinstance(block.last_op, FallthroughOp):
-                program.add_jump(end, dest, Colors.WHITE)
+                program.add_jump(end, dest, Colors.BRIGHT_BLACK)
             else:
                 program.add_jump(end, dest, Colors.BLUE)
 
