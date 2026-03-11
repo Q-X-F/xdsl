@@ -12,10 +12,10 @@ def string_to_case_insensitive_regex(s: str) -> str:
         if upper == lower:
             parts.append(re.escape(char))  # Non-letter: escape literally
         else:
-            parts.append(f'[{upper}{lower}]')
+            parts.append(f"[{upper}{lower}]")
 
     parts.append("")
-    return ''.join(parts)
+    return "".join(parts)
 
 
 # Turns a list of strings into a regex body that case-insensitively matches any string in the Lark grammar.
@@ -80,7 +80,7 @@ ops = [
     "ret",
     "syscall",
     "imul",
-    "idiv"
+    "idiv",
 ]
 
 ops_re = list_string_to_case_insensitive_regex(ops)
@@ -121,7 +121,7 @@ regs = [
     "r12",
     "r13",
     "r14",
-    "r15"
+    "r15",
 ]
 
 regs_re = list_string_to_case_insensitive_regex(regs)
@@ -132,19 +132,19 @@ regs_re = list_string_to_case_insensitive_regex(regs)
 # Terminals in uppercase are part of the parse tree, while explicitly quoted terminals are discarded.
 # The program nonterminal is the starting symbol.
 # Productions are in the form head.precedence : body
-grammar = r"""
+grammar = f"""
     program : (label | instruction)*
 
     instruction : OPCODE ( (LABELNAME | REG | IMM | mem) ("," (LABELNAME | REG | IMM | mem))* )?
 
     label : LABELNAME ":"
     mem : "[" REG (/[+-]/ OFFSET)? "]"
-    COMMENT.3 : /[;#][^\n]*/
+    COMMENT.3 : /[;#][^\\n]*/
     %ignore COMMENT
-    DIRECTIVE.3 : /\.[^\n]*/
+    DIRECTIVE.3 : /\\.[^\\n]*/
     %ignore DIRECTIVE
-    OPCODE.2 : /(""" + ops_re + r""")(?=[\s\t\n\f\r])/
-    REG.2 : /""" + regs_re + r"""/
+    OPCODE.2 : /({ops_re})(?=[\\s\\t\\n\\f\\r])/
+    REG.2 : /{regs_re}/
     %import common.SIGNED_NUMBER -> IMM
     %import common.NUMBER -> OFFSET
     LABELNAME.1 : /[._a-zA-Z][._a-zA-Z0-9]*/
@@ -155,7 +155,7 @@ grammar = r"""
 
 
 # Lark parser
-x86_parser = Lark(grammar, start='program')
+x86_parser = Lark(grammar, start="program")
 
 
 # Renaming the "x86_parser.parse" method to "parse"
@@ -165,23 +165,22 @@ def parse(code_segment: str):
 
 # Tests
 if __name__ == "__main__":
-    
     test_comment = (
-        "xor rax, rax       ; fib_a = 0\n" 
-        "mov rbx, 1         ; fib_b = 1\n" 
+        "xor rax, rax       ; fib_a = 0\n"
+        "mov rbx, 1         ; fib_b = 1\n"
         "mov rcx, 12        ; print first 12 numbers\n"
     )
 
-    test_mem = ("""
+    test_mem = """
         mov rax, [rdx]
         mov rbx, [rdx + 4]
         mov rcx, [rdx - 4]
         mov [rdx], rcx
         mov [rdx + 4], rax
         mov [rdx - 4], rbx
-    """)
+    """
 
-    test_label = ("""
+    test_label = """
         .done: 
         jge .done
         jambloat:
@@ -190,12 +189,11 @@ if __name__ == "__main__":
         jge ninja
         ripple:
         jge ripple
-    """)
+    """
 
-    test_no_newline = ("mov rax, rbx add rbx, rax")
+    test_no_newline = "mov rax, rbx add rbx, rax"
 
-
-    test_fib = ("""
+    test_fib = """
         _start:
             push rbx           ; save callee-saved register
         
@@ -224,7 +222,7 @@ if __name__ == "__main__":
             mov rax, 60
             xor rdi, rdi
             syscall
-    """)
+    """
 
     # pretty printed test
     print(parse(test_comment).pretty())
@@ -232,9 +230,3 @@ if __name__ == "__main__":
     print(parse(test_label).pretty())
     print(parse(test_no_newline).pretty())
     print(parse(test_fib).pretty())
-
-
-
-
-
-
