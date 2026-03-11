@@ -46,8 +46,17 @@ def bind_scrolls(program: ProgramGraph, text: str, container_id: str) -> list[Li
 class AsmApp(App):
     CSS = """
     .t {
-        overflow: auto;
-        border: solid green;
+        overflow: auto auto;
+        border: round ansi_bright_black;
+    }
+
+    Line {
+        text-wrap: nowrap;
+        text-overflow: clip;
+    }
+
+    Footer {
+        background: transparent;
     }
     """
 
