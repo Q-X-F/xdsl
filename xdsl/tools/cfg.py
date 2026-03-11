@@ -1,14 +1,9 @@
-# from lark import ParseTree, Token
-
-# from convert_x86_to_mlir import X86Converter
 from typing import TypeAlias
 
 from xdsl.dialects.x86 import C_JmpOp, FallthroughOp
 from xdsl.dialects.x86.ops import ConditionalJumpOperation
 from xdsl.dialects.x86_func import CallOp, RetOp
 from xdsl.ir import Block, Region
-
-# from xdsl.tools.convert_x86_to_mlir import X86Converter
 
 SuccBlock: TypeAlias = tuple[()] | tuple[Block] | tuple[Block, Block]
 
@@ -63,27 +58,6 @@ def build_adj(
             raise CFGError("Last op not one of (RetOp, FallthroughOp, jump)")
 
     return adj
-
-
-# This functionality is implemented in the raiser instead.
-# def detect_loops(
-#     adj: dict[Block, tuple[()] | tuple[Block] | tuple[Block, Block]], start: Block
-# ) -> dict[Block, tuple[Block, ...]]:
-#     """Detect backedges and return dictionary of `first block in loop` -> `blocks in loop`"""
-
-#     d: dict[Block, tuple[Block, ...]] = {}
-
-#     def rec(cur: Block, vis: tuple[Block, ...]):
-#         if cur in vis:
-#             # found loop. ie cur=x and we have vis=(..., x, a, b, c). so the loop is x->a->b->c.
-#             i = vis.index(cur)
-#             d[cur] = vis[i:]
-#             return
-#         for nx in adj[cur]:
-#             rec(nx, vis + (cur,))
-
-#     rec(start, ())
-#     return d
 
 
 def collate_function(entry: Block, visited: set[Block]) -> list[Block]:
@@ -151,50 +125,53 @@ def group_functions(
     return grouped
 
 
+# informal test of function grouper
 if __name__ == "__main__":
-    # --- Setup Blocks ---
+    # Setup blocks
     b_main = Block()  # Entry 0
-    b_orphan_1 = Block()  # Unreachable between functions
-    b_helper = Block()  # Entry 2 (Called by main)
-    b_helper_cont = Block()  # Reachable from helper (multi-block function)
-    b_orphan_2 = Block()  # Unreachable at the end
+    b_orphan_1 = Block()  # Unreachable
+    b_helper = Block()  # Entry 2 (called by main)
+    b_helper_cont = Block()  # Reachable from helper
+    b_orphan_2 = Block()  # Unreachable
 
-    # --- Label Map ---
     label_map = {"main": 0, "orphan_1": 1, "helper": 2, "helper_cont": 3, "orphan_2": 4}
     all_blocks = [b_main, b_orphan_1, b_helper, b_helper_cont, b_orphan_2]
 
-    # --- Instructions & Logic ---
-
-    # Block 0: main (Entry point)
-    # Calls 'helper', but has no successors (it returns)
+    # Populate blocks
+    # Block 0: main (entry point)
+    # Calls 'helper'
     b_main.add_op(CallOp("helper", [], []))
     b_main.add_op(RetOp())
 
-    # Block 1: orphan_1 (Dead code)
-    # Nothing points here, and it doesn't point anywhere.
+    # Block 1: orphan_1 (unreachable)
+    # Nothing points here, and it doesn't point anywhere
     b_orphan_1.add_op(RetOp())
 
-    # Block 2: helper (Entry point)
+    # Block 2: helper (entry point)
     # Points to Block 3
     b_helper.add_op(FallthroughOp([], b_helper_cont))
 
-    # Block 3: helper_cont (Part of helper)
+    # Block 3: helper_cont (reachable by helper)
     b_helper_cont.add_op(RetOp())
 
-    # Block 4: orphan_2 (Dead code)
+    # Block 4: orphan_2 (unreachable)
     b_orphan_2.add_op(RetOp())
 
-    # --- Run Grouping ---
     result = group_functions(all_blocks, label_map)
 
-    # --- Verification ---
-    print(f"Resulting items: {len(result)}")
+    print(f"Num groups: {len(result)}")
     for i, item in enumerate(result):
         if isinstance(item, list):
             entry_idx = all_blocks.index(item[0])
             name = [k for k, v in label_map.items() if v == entry_idx][0]
-            print(f"Index {i}: [Function Group] {name} ({len(item)} blocks)")
+            print(f"{i}: [function] {name} ({len(item)} blocks)")
         else:
             orphan_idx = all_blocks.index(item)
             name = [k for k, v in label_map.items() if v == orphan_idx][0]
-            print(f"Index {i}: [Unreachable Block] {name}")
+            print(f"{i}: [unreachable] {name}")
+    # Prints:
+    # Num groups: 4
+    # 0: [function] main (1 blocks)
+    # 1: [unreachable] orphan_1
+    # 2: [function] helper (2 blocks)
+    # 3: [unreachable] orphan_2
