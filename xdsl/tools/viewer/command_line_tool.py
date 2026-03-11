@@ -2,7 +2,7 @@ import argparse
 import locale
 import sys
 
-from xdsl.viewer.core import Renderer, process_asm, process_asm_opt, process_mlir
+from xdsl.tools.viewer.core import Renderer, process_asm, process_asm_opt, process_mlir
 
 
 def supports_utf() -> bool:

@@ -7,7 +7,7 @@ from textual.containers import Horizontal, ScrollableContainer
 from textual.visual import VisualType
 from textual.widgets import Footer, Static
 
-from xdsl.viewer.core import ProgramGraph, Renderer, process_asm, process_mlir
+from xdsl.tools.viewer.core import ProgramGraph, Renderer, process_asm, process_mlir
 
 
 class Line(Static):
