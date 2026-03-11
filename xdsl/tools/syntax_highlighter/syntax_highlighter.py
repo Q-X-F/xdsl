@@ -181,13 +181,7 @@ def highlight_x86(code: str) -> str:
             elif lower in REGISTERS:
                 token = token.replace(clean, color(clean, "register"))
 
-            elif clean.isdigit() or 
-                clean.startswith("0x")
-                and all(c in "0123456789abcdefABCDEF" for c in clean[2:])
-                or (
-                clean.startswith("-")
-                and all(c in "0123456789" for c in clean[1:])
-            ):
+            elif clean.isdigit() or (clean.startswith("0x") and all(c in "0123456789abcdefABCDEF" for c in clean[2:])) or (clean.startswith("-")and all(c in "0123456789" for c in clean[1:])):
                 token = token.replace(clean, color(clean, "number"))
 
             new_tokens.append(token)
