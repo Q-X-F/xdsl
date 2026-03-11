@@ -1,92 +1,160 @@
 from collections.abc import Callable
+from typing import TypeAlias
 
-from xdsl.dialects.arith import AddiOp, ConstantOp, SubiOp, XOrIOp
-from xdsl.dialects.builtin import IntegerAttr, StringAttr
+from xdsl.dialects.builtin import StringAttr
+from xdsl.dialects.x86.assembly import AssemblyInstructionArg
+from xdsl.dialects.x86.ops import (
+    RI_AddOp,
+    RI_SubOp,
+    RS_AddOp,
+    RS_SubOp,
+    RS_XorOp,
+    X86Instruction,
+)
+from xdsl.dialects.x86.registers import GeneralRegisterType
 from xdsl.ir import Operation
 
+OpArgs: TypeAlias = tuple[AssemblyInstructionArg | None, ...]
 
-def _annoXor(op: Operation) -> None:
-    """Annotates the x XOR x = 0 pattern"""
 
-    if not isinstance(op, XOrIOp):
-        return
-    if op.lhs != op.rhs:
-        return
+def _is_same_register(args: OpArgs) -> GeneralRegisterType | None:
+    """Determines whether the source and destination for a RS-type operation
+    are the same register.
 
-    op.attributes["label"] = StringAttr(f"{op.lhs.name_hint} = 0")
+    Args:
+        args: Assembly-line arguments for the operation
+
+    Returns:
+        The shared register if both operands are the same, otherwise None
+    """
+
+    if len(args) != 2:
+        return None
+    if not isinstance(args[0], GeneralRegisterType) or not isinstance(
+        args[1], GeneralRegisterType
+    ):
+        return None
+    if args[0] != args[1]:
+        return None
+    return args[0]
+
+
+def _anno_xor(op: Operation, args: OpArgs) -> bool:
+    """Annotates the idiom of a self-XORed register."""
+
+    if not isinstance(op, RS_XorOp):
+        return False
+
+    reg = _is_same_register(args)
+    if reg is None:
+        return False
+
+    op.attributes["label"] = StringAttr(f"{reg.register_name} = 0")
     op.attributes["description"] = StringAttr(
         "XORs the register with itself, setting it to 0"
     )
+    return True
 
 
-def _annoSub(op: Operation) -> None:
-    """Annotates the x - x = 0 pattern"""
+def _anno_sub_self(op: Operation, args: OpArgs) -> bool:
+    """Annotates the idiom of a self-subtracted register"""
 
-    if not isinstance(op, SubiOp):
-        return
-    if op.lhs != op.rhs:
-        return
+    if not isinstance(op, RS_SubOp):
+        return False
 
-    op.attributes["label"] = StringAttr(f"{op.lhs.name_hint} = 0")
+    reg = _is_same_register(args)
+    if reg is None:
+        return False
+
+    op.attributes["label"] = StringAttr(f"{reg.register_name} = 0")
     op.attributes["description"] = StringAttr(
         "Subtracts the register from itself, setting it to 0"
     )
+    return True
 
 
-def _annoAddConst(op: Operation) -> None:
-    """Annotates the x++ and x += i patterns"""
+def _anno_add_self(op: Operation, args: OpArgs) -> bool:
+    """Annotates the idiom of a self-added register"""
 
-    if not isinstance(op, AddiOp):
-        return
-    if not isinstance(c := op.rhs.owner, ConstantOp):
-        return
-    if not isinstance(c.value, IntegerAttr):
-        return
+    if not isinstance(op, RS_AddOp):
+        return False
 
-    if c.value.value.data == 1:
-        op.attributes["label"] = StringAttr(f"{op.lhs.name_hint}++")
+    reg = _is_same_register(args)
+    if reg is None:
+        return False
+
+    op.attributes["label"] = StringAttr(f"{reg.register_name} *= 2")
+    op.attributes["description"] = StringAttr(
+        "Adds the register with itself, doubling it"
+    )
+    return True
+
+
+def _anno_add_const(op: Operation, args: OpArgs) -> bool:
+    """Annotates registers being added by immediates."""
+
+    if not isinstance(op, RI_AddOp):
+        return False
+
+    if len(args) != 2:
+        return False
+    if not isinstance(args[0], GeneralRegisterType):
+        return False
+
+    if op.immediate.value.data == 1:
+        op.attributes["label"] = StringAttr(f"{args[0].register_name}++")
         op.attributes["description"] = StringAttr("Increments the register")
     else:
         op.attributes["label"] = StringAttr(
-            f"{op.lhs.name_hint} += {c.value.value.data}"
+            f"{args[0].register_name} += {op.immediate.value.data}"
         )
         op.attributes["description"] = StringAttr("Adds a constant to the register")
+    return True
 
 
-def _annoSubConst(op: Operation) -> None:
-    """Annotates the x-- and x -= i patterns"""
+def _anno_sub_const(op: Operation, args: OpArgs) -> bool:
+    """Annotates registers being subtracted by immediates."""
 
-    if not isinstance(op, AddiOp):
-        return
-    if not isinstance(c := op.rhs.owner, ConstantOp):
-        return
-    if not isinstance(c.value, IntegerAttr):
-        return
+    if not isinstance(op, RI_SubOp):
+        return False
 
-    if c.value.value.data == 1:
-        op.attributes["label"] = StringAttr(f"{op.lhs.name_hint}--")
+    if len(args) != 2:
+        return False
+    if not isinstance(args[0], GeneralRegisterType):
+        return False
+
+    if op.immediate.value.data == 1:
+        op.attributes["label"] = StringAttr(f"{args[0].register_name}--")
         op.attributes["description"] = StringAttr("Decrements the register")
     else:
         op.attributes["label"] = StringAttr(
-            f"{op.lhs.name_hint} -= {c.value.value.data}"
+            f"{args[0].register_name} -= {op.immediate.value.data}"
         )
         op.attributes["description"] = StringAttr(
             "Subtracts a constant from the register"
         )
+    return True
 
 
-annoFunctions: list[Callable[[Operation], None]] = [
-    _annoXor,
-    _annoSub,
-    _annoAddConst,
-    _annoSubConst,
+anno_functions: list[Callable[[Operation, OpArgs], bool]] = [
+    _anno_xor,
+    _anno_sub_self,
+    _anno_add_self,
+    _anno_add_const,
+    _anno_sub_const,
 ]
 
 
-def annoOperation(op: Operation) -> None:
+def anno_operation(op: Operation) -> None:
     """Adds annotations for an operation depending on idiomatic patterns.
 
     Args:
         op: The xDSL operation to annotate."""
-    for f in annoFunctions:
-        f(op)
+    if not isinstance(op, X86Instruction):
+        return
+
+    args: OpArgs = op.assembly_line_args()
+
+    for f in anno_functions:
+        if f(op, args):
+            break
