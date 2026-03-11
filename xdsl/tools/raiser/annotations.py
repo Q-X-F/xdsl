@@ -147,6 +147,10 @@ anno_functions: list[Callable[[Operation, OpArgs], bool]] = [
 
 def anno_operation(op: Operation) -> None:
     """Adds annotations for an operation depending on idiomatic patterns.
+    The annotations are in the op.attributes field, with the following:
+    attributes["label"]: the idiomatic pattern (e.g. "eax++")
+    attributes["description"]: an explanation of the pattern (e.g.
+        "increments the register")
 
     Args:
         op: The xDSL operation to annotate."""
