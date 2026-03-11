@@ -53,7 +53,34 @@ def _annoAddConst(op: Operation) -> None:
         op.attributes["description"] = StringAttr("Adds a constant to the register")
 
 
-annoFunctions: list[Callable[[Operation], None]] = [_annoXor, _annoSub, _annoAddConst]
+def _annoSubConst(op: Operation) -> None:
+    """Annotates the x-- and x -= i patterns"""
+
+    if not isinstance(op, AddiOp):
+        return
+    if not isinstance(c := op.rhs.owner, ConstantOp):
+        return
+    if not isinstance(c.value, IntegerAttr):
+        return
+
+    if c.value.value.data == 1:
+        op.attributes["label"] = StringAttr(f"{op.lhs.name_hint}--")
+        op.attributes["description"] = StringAttr("Decrements the register")
+    else:
+        op.attributes["label"] = StringAttr(
+            f"{op.lhs.name_hint} -= {c.value.value.data}"
+        )
+        op.attributes["description"] = StringAttr(
+            "Subtracts a constant from the register"
+        )
+
+
+annoFunctions: list[Callable[[Operation], None]] = [
+    _annoXor,
+    _annoSub,
+    _annoAddConst,
+    _annoSubConst,
+]
 
 
 def annoOperation(op: Operation) -> None:
