@@ -1,4 +1,4 @@
-from xdsl.viewer.core import ProgramGraph
+from xdsl.tools.viewer.core import ProgramGraph
 
 
 def test_add_line():

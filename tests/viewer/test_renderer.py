@@ -1,4 +1,4 @@
-from xdsl.viewer.core import Jump, ProgramGraph, Renderer
+from xdsl.tools.viewer.core import Jump, ProgramGraph, Renderer
 
 
 def is_disjoint(seq: list[Jump]) -> bool:
